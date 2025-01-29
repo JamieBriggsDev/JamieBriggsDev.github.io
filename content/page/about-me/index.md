@@ -20,4 +20,5 @@ links:
     website: https://mastodon.social/@JBriggs_DEV
 ---
 
-My name is Jamie Briggs, and I'm a software developer!
+My name is Jamie Briggs, and I'm a software developer! I currently
+work for [Opencast software](https://opencastsoftware.com/).
