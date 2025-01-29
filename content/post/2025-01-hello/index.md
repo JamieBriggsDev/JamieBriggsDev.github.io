@@ -24,6 +24,13 @@ links:
 ---
 
 First I'd like to say hello, so I guess hello! My plan for this year is 
-to grow my social media prescence a bit more. So to do this, I've created this blog. What I post on here, I'm not too sure. What I do know is that I at least aim to use this platform to post updates to the projects I work on.
+to grow my social media presence a bit more. So to do this, I've created this blog. 
+I don't have a proper plan as to what I'll post on here, but I do aim to post content
+which I find beneficial, or things I have learnt. Although the majority of my work
+is software development focused, that doesn't necessarily mean that all of my
+posts will be related; they could just be tech related or things I found cool!
 
-What I do know, is that I have a bunch of projects which I'll be posting on here from my old portfolio. My old portfolio is currently sat in limbo behind the paywall which is Adobe so it would be good to revisit some of my older work! Expect to see some of this work in the near future!
+What I do know, is that I have a bunch of projects which I'll be posting on 
+here from my old portfolio. My old portfolio is currently sat in limbo behind 
+the paywall which is Adobe so it would be good to revisit some of my older work! 
+Expect to see some of this work in the near future!
