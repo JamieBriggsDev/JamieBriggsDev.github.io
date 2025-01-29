@@ -10,7 +10,7 @@ categories:
 tags:
     - Update
     - General
-weight: 1       # You can add weight to some posts to override the default sorting (date descending)
+weight: 1
 links:
   - title: GitHub
     description: If you wish to look at some of my work, have a look at my GitHub account.
@@ -23,9 +23,7 @@ links:
     website: https://mastodon.social/@JBriggs_DEV
 ---
 
-
 First I'd like to say hello, so I guess hello! My plan for this year is 
 to grow my social media prescence a bit more. So to do this, I've created this blog. What I post on here, I'm not too sure. What I do know is that I at least aim to use this platform to post updates to the projects I work on.
 
-What I do know, is that I have a bunch of projects which I'll be posting on here from my old portfolio. My old portfolio is currently sat in limbo behind the paywall which is Adobe so it would be good to revisit some of my older work!
-
+What I do know, is that I have a bunch of projects which I'll be posting on here from my old portfolio. My old portfolio is currently sat in limbo behind the paywall which is Adobe so it would be good to revisit some of my older work! Expect to see some of this work in the near future!

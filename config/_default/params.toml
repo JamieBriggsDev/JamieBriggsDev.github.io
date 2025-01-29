@@ -6,14 +6,15 @@ favicon = "/favicon.png"
 
 [footer]
 since = 2025
-customText = ""
+customText = "Jamie Briggs"
 
 [dateFormat]
-published = "Jan 02, 2006"
-lastUpdated = "Jan 02, 2006 15:04 MST"
+published = "2 January 2006"
+lastUpdated = "2 January 2006 15:04 MST"
 
 [sidebar]
-emoji = "☕️"
+emoji = "👋🏻"
+compact = false
 subtitle = "Jamie Briggs - Senior Consultant & Software Developer @ Opencast Software"
 
 [sidebar.avatar]
@@ -24,6 +25,7 @@ src = "img/me.jpeg"
 [article]
 headingAnchor = false
 math = false
+toc = true
 readingTime = true
 
 # https://creativecommons.org/licenses/by-nc/4.0/deed.en
