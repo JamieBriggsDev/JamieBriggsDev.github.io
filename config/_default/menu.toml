@@ -7,18 +7,28 @@
 #icon = "home"
 #newtab = true
 
+#https://tabler.io/icons
+
 [[social]]
 identifier = "github"
 name = "GitHub"
-url = "https://github.com/CaiJimmy/hugo-theme-stack"
+url = "https://github.com/JamieBriggsDev"
 
 [social.params]
 icon = "brand-github"
 
 [[social]]
-identifier = "twitter"
-name = "Twitter"
-url = "https://twitter.com"
+identifier = "mastodon"
+name = "Mastodon"
+url = "https://mastodon.social/@JBriggs_DEV"
 
 [social.params]
-icon = "brand-twitter"
+icon = "brand-mastodon"
+
+[[social]]
+identifier = "linkedin"
+name = "LinkedIn"
+url = "https://www.linkedin.com/in/jbriggs-dev/"
+
+[social.params]
+icon = "brand-linkedin"

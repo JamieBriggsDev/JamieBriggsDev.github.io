@@ -1,4 +1,5 @@
 ---
+draft: true
 title: Hello World
 description: Welcome to Hugo Theme Stack
 slug: hello-world
