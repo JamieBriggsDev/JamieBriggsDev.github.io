@@ -1,6 +1,6 @@
 ---
 title: Life Update
-description: General post regarding any life updates!
+description: Posts regarding any life updates!
 image:
 
 # Badge style

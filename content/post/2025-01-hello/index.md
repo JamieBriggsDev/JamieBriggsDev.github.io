@@ -6,7 +6,7 @@ slug: hello
 date: 2025-01-29 18:48:00+0000
 image: cover.jpeg
 categories:
-    - Life Update
+    - life-update
 tags:
     - Update
     - General
