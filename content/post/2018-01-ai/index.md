@@ -1,6 +1,6 @@
 ---
 title: AI, Multi-Threading and Networking Bot Game
-description: Small description regarding AI Bot.
+description: A year long project implementing an AI for a capture the flag based game
 slug: 2018-01-ai
 date: 2018-01-19
 image: ai-project-1.jpg
