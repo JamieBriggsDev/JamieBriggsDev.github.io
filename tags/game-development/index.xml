@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Game Development on JBriggs.DEV</title><link>https://jbriggs.dev/tags/game-development/</link><description>Recent content in Game Development on JBriggs.DEV</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sun, 14 Apr 2019 00:00:00 +0000</lastBuildDate><atom:link href="https://jbriggs.dev/tags/game-development/index.xml" rel="self" type="application/rss+xml"/><item><title>Ludum Dare 44 - Nine Lives</title><link>https://jbriggs.dev/p/2019-04-ludum-dare-44/</link><pubDate>Sun, 14 Apr 2019 00:00:00 +0000</pubDate><guid>https://jbriggs.dev/p/2019-04-ludum-dare-44/</guid><description>&lt;img src="https://jbriggs.dev/p/2019-04-ludum-dare-44/cover.png" alt="Featured image of post Ludum Dare 44 - Nine Lives" />&lt;p>For anyone who is unaware, Ludum Dare is a bi-annual game jam where participants take
+part in creating a game for a common theme which tends to be announced the moment the
+event starts. From this point, participants receive 48 hours to create and submit their
+game.&lt;/p>
+&lt;p>For Ludum Dare 44, the theme was &amp;ldquo;Your life is currency&amp;rdquo;. With this being my first
+game jam, I didn&amp;rsquo;t rush into creating the game and I instead brainstormed for probably
+a bit too long which wasted most of first day. In hindsight, I should&amp;rsquo;ve just started
+creating something, even if it was just the basic structure of a video game (i.e.
+menus and game systems).&lt;/p>
+&lt;p>Once I had an idea, I finally spent the remaining time rushing a game out. I learnt
+a fair amount about Unity development (this was my first in depth foray into Unity) and
+I published something which I think was in theme. I also learnt quite a lot about
+deploying and publishing embedded Unity games using &lt;a class="link" href="https://itch.io/" target="_blank" rel="noopener"
+>itch.io&lt;/a>.&lt;/p>
+&lt;p>The game I finally created was called &amp;ldquo;Nine Lives&amp;rdquo;. Given the theme of the game jam
+was &amp;ldquo;Your life is currency&amp;rdquo;, I decided I could play on the common expression that cats
+have 9 lives. The game itself is a bit of a linear roguelike, inspired by earlier
+The Legend of Zelda games, where you go from room to room. This game was an endless
+runner and consisted of yourself running around as a cat shooting balls of wool
+at oversized rats. In the game, you can score points by killing rats, and sometimes
+collect more hearts to keep your life up.&lt;/p>
+&lt;p>In the end, although I did follow the theme slightly, it wasn&amp;rsquo;t a very strong submission.
+There wasn&amp;rsquo;t really much of an idea of currency, and although you had a life total in game,
+it was more of a health bar as opposed to a currency of sorts. I did however learn quite
+a lot about game development, and how Unity handles collisions and scenes. I also learnt
+more about the sprite program Asprite. This was my first ever instance of using this program,
+and I thoroughly recommend it to create in game assets in pixel form as it&amp;rsquo;s super easy to use!&lt;/p>
+&lt;p>Below is my submission for the Ludum Dare 44!&lt;/p>
+&lt;iframe frameborder="0" src="https://itch.io/embed-upload/2809833?color=333333" allowfullscreen="" width="100%" height="704">&lt;/iframe>
+&lt;p>There are three takeaways which I learnt when it comes to tackling future game jams. The first
+takeaway is to not spend too much time trying to think of the best idea to submit something.
+48 hours is really not much time for creating a game, so if you don&amp;rsquo;t have an idea, at least start
+creating something.&lt;/p>
+&lt;p>The second thing I took away from this experience was that you don&amp;rsquo;t need to create
+something perfect. In my head for this submission, I wanted a completed game to show off,
+so I went for an endless runner based game. However after looking at other submissions, other
+games were essentially tech demos, or a first level of sorts. Due to this, they
+were much more refined.&lt;/p>
+&lt;p>Finally, the main takeaway was that game jams are there to learn something new. It&amp;rsquo;s okay to
+not submit something as really, a game jam is just a fun excuse to learn something new and
+create something along the way!&lt;/p></description></item><item><title>AI, Multi-Threading and Networking Bot Game</title><link>https://jbriggs.dev/p/2018-01-ai/</link><pubDate>Fri, 19 Jan 2018 00:00:00 +0000</pubDate><guid>https://jbriggs.dev/p/2018-01-ai/</guid><description>&lt;img src="https://jbriggs.dev/p/2018-01-ai/ai-project-1.jpg" alt="Featured image of post AI, Multi-Threading and Networking Bot Game" />&lt;p>For an assignment during my degree in Computer Games Programming, I was
+tasked with making a game in which I had to write the AI for a team of
+bots to beat another team of bots with badly written AI. This was all
+done in C++ and within a 2D game engine created by the module tutor Chris Rook.&lt;/p>
+&lt;p>The game was essentially a 5 v 5 between two teams fighting over
+domination points. There is no end to the game, just two scores
+which explain which team had the better AI. Everything was already
+created before starting the AI such as the map, where the domination
+points were, the teams and the various rules which needed to be
+followed. All there was left to do was write a AI which could beat
+the enemies teams pre-made AI.&lt;/p>
+&lt;p>The AI was split into two different sections; the generation of a
+navmesh in which the bots could use the navmesh to work out how to
+get from point A to point B, and then the making of the bots core
+AI which told the bot when to find a domination point, when to retreat
+and get ammo, and when to attack.&lt;/p>
+&lt;p>To start with, since the map was pre-made by Chris, all there was
+to do was to generate a navmesh. The navmesh was made by passing a
+rectangle into a function which partitions the rectangle into 4
+smaller rectangles if the original rectangle is overlapping an
+obstacle. If the rectangle either doesn’t overlap and obstacle
+or gets too small, a node is placed and saved into a list of nodes.&lt;/p>
+&lt;p>&lt;img src="https://jbriggs.dev/p/2018-01-ai/ai-project-2.png"
+width="402"
+height="241"
+srcset="https://jbriggs.dev/p/2018-01-ai/ai-project-2_hu_ee794f03e969c0a1.png 480w, https://jbriggs.dev/p/2018-01-ai/ai-project-2_hu_3c1de383594cb2b8.png 1024w"
+loading="lazy"
+alt="Graphic showcasing how the navmesh was created."
+class="gallery-image"
+data-flex-grow="166"
+data-flex-basis="400px"
+>&lt;/p>
+&lt;p>Then once all the nodes are placed, edges are created between nodes
+which can see each other in which paths are made which can reach
+each other. By doing this, a network of paths is then created and
+the bots finally have a navmesh which can be traversed. This navmesh
+can then be used within the A* path-finding algorithm later.&lt;/p>
+&lt;p>The second part of the bots AI was then started once the map had
+been made, and that began with behaviours. These behaviours were
+actions which the bots could do; seek, flee, arrive, evade, pursue,
+path find and wall evade. The first five were more advanced and were
+turned on in specific moments during the path find behaviour
+(when following points in a path, the bot would seek the next node,
+when arriving at the last point in a path, it would use the
+arrive behaviour). The wall avoid behaviour was essentially
+turned on at all times to make sure a bot would not get stuck
+on a wall.&lt;/p>
+&lt;p>&lt;img src="https://jbriggs.dev/p/2018-01-ai/ai-project-3.jpg"
+width="1140"
+height="641"
+srcset="https://jbriggs.dev/p/2018-01-ai/ai-project-3_hu_2fa3e04981f08c51.jpg 480w, https://jbriggs.dev/p/2018-01-ai/ai-project-3_hu_cebd80c0a7816f32.jpg 1024w"
+loading="lazy"
+alt="Bots drawing a line towards the next node they are walking to."
+class="gallery-image"
+data-flex-grow="177"
+data-flex-basis="426px"
+>
+&lt;img src="https://jbriggs.dev/p/2018-01-ai/ai-project-4.jpg"
+width="1140"
+height="641"
+srcset="https://jbriggs.dev/p/2018-01-ai/ai-project-4_hu_b4796b7a001d4f3d.jpg 480w, https://jbriggs.dev/p/2018-01-ai/ai-project-4_hu_c4ec7b3673b845b0.jpg 1024w"
+loading="lazy"
+alt="Debug information showing bot position, and they’re current state."
+class="gallery-image"
+data-flex-grow="177"
+data-flex-basis="426px"
+>&lt;/p>
+&lt;p>The most advanced behaviour of these would be the path finding
+behaviour, in which a path is followed using the seek and
+arrive behaviours. However for this to work, a path must be
+found first. Using the navmesh which was made before, an A*
+algorithm is used to find the shortest path from A to B given
+two coordinates.&lt;/p>
+&lt;p>After this, a function was made which combined all of the different
+behaviours to make one acceleration vector which the bot used given
+whichever behaviour is being used at that current time. An easy
+explanation of this would be that the bot is heading towards a goal,
+but a wall is in the way. So the acceleration of the seek is added
+to the acceleration of the wall avoid. In doing so, the bot would
+still head towards the goal, even if the bot had to slightly turn
+away from a wall to avoid hitting it.&lt;/p>
+&lt;p>Next to make use of these behaviours, different states was made.
+A state within the program would in the end give a bot a specific
+task. In this case, three states was made; capture in which a
+bot will go and find a domination point and capture it, attack
+in which an enemy is close and the bot will fight the enemy, and
+reload in which a bot will go find a reload point and restock
+on ammo. With this done, the bots were complete and could win
+in a game. However, more could be done to improve the program.&lt;/p>
+&lt;p>Multi-Threading is the idea that a task within a program or application
+would run a process off the main thread the program runs on an multitasks
+calculations. This is massively useful in terms of making sure a program
+is still responsive whilst working out a huge problem or loading a big
+file (no one wants a program which freezes and becomes unresponsive for
+a few seconds as it is unprofessional).&lt;/p>
+&lt;p>This was implemented into the program after finding out that the
+program would stutter whenever a bot needed to do some path finding.
+With the A* algorithm looping through hundreds of nodes within the
+game, it can take a lot of processing power and freeze the game
+slightly. This was proven by recording the update times, and the
+first update in the game finding 5 different paths in one update
+cycle (due to having 5 bots per team) was found to be quite large
+compared to an average frame. Therefore, it was made so whenever a
+path was to be worked out with the A* algorithm, it would be done
+on a separate thread and the bot would wait until the path was then
+found. This fixed any stutters within the program, and especially
+within the start of the game. The first frame then returned back
+to an average frame time and any stutters were completely eliminated.
+Adding more bots to each team even showed that it had fixed the
+problem as even with 100 bots finding a path, no pauses or stutters
+was shown as it were previously even with just 5 bots.&lt;/p>
+&lt;p>The other improvement made within the game was the use of networking.
+Despite the game only being two teams of bots and not two human players,
+it was still done. The game was made so that one computer running the
+game could act as the host, and another computer running the game
+could act as the client and connect to the host. The host would
+then send over all the bots position data, ammo and when the bot
+was shooting so then everything which happened on the host computer would
+occur on the client computer. This was all done through bit packing showed
+how a client on any game could spectate another game with just basic
+information.&lt;/p>
+&lt;p>After the two improvements was done, the game was then finished complete
+with a working AI which used A* path finding and states, multi-threading
+and networking. As a year-long project, a lot was learnt in undertaking
+this project including how A*, multi threading and networking all work.&lt;/p></description></item><item><title>Star Fox PS4 remake</title><link>https://jbriggs.dev/p/2017-07-lyat-wars/</link><pubDate>Tue, 25 Jul 2017 00:00:00 +0000</pubDate><guid>https://jbriggs.dev/p/2017-07-lyat-wars/</guid><description>&lt;img src="https://jbriggs.dev/p/2017-07-lyat-wars/lyat-wars-ps4.png" alt="Featured image of post Star Fox PS4 remake" />&lt;blockquote>
+&lt;p>This post was written 9th February 2025, as a retrospective post to port my portfolio from Adobe Portfolio to this blog.&lt;/p>&lt;/blockquote>
+&lt;p>One of the modules in my Computer Games Programming Degree at &lt;a class="link" href="https://www.northumbria.ac.uk/" target="_blank" rel="noopener"
+>Northumbria University&lt;/a> involved myself creating a game using the PlayStation 4 development kits. A friend of mine had the initiatice to recreate a video game from his childhood. The marking criteria for this module only involved gameplay elements such as loading &lt;code>.obj&lt;/code> files, rendering textures and AI. This meant no marks were ever given for creativity and story telling; theoretically I could&amp;rsquo;ve produced unplayable rubbish, but if it had aspects of gameplay like AI or even 3D rendering, it would&amp;rsquo;ve scored marks. So I copied his thought process because if I recreated a game from my childhood as well, I would spend less time focusing on what to create and just focusing on gameplay mechanics.&lt;/p>
+&lt;p>With this in mind, I needed to pick something which wasn&amp;rsquo;t too complicated, but also something I would be interested in recreating; if I thoroughly into recreating a game I loved, chances are I would also not mind spending hours creating the game as a passion project. In the end, I went with &lt;a class="link" href="https://en.wikipedia.org/wiki/Star_Fox_64" target="_blank" rel="noopener"
+>Star Fox 64&lt;/a> (I knew it as Lyat Wars growing up due to Nintendo wanting to avoid confusion with a German company named &amp;ldquo;StarVox&amp;rdquo;).&lt;/p>
+&lt;p>To learn how to create games for the PlayStation 4, there was a very helpful tutorial given to the students within my course which went into how to load and render &lt;code>.obj&lt;/code> files, to shader work and it&amp;rsquo;s relativity to GLSL, to how to program the controller and it&amp;rsquo;s behaviour. A lot of the work which was done within this tutorial was very much a tutorial on how to write a game in the same style as a lecturer, meaning everyone had the same game structure, but it was a very good start into the various aspects of creating a 3D game from scratch. Retrospectively, the PlayStation 4 actually did a lot of the rending for you with it&amp;rsquo;s own SDK compared to OpenGL, but you still had to provide the SDK with your game data and logic. However with the basics understood, there was enough to make a start on the Star Fox 64 remake. Not too important, but games written to use the official PlayStation 4 development kits were written in &lt;a class="link" href="https://en.wikipedia.org/wiki/C%2B%2B" target="_blank" rel="noopener"
+>C++&lt;/a>.&lt;/p>
+&lt;p>What I remembered most of Star Fox 64 from my childhood was how fun it was to control the player ship, and who can forget performing a &lt;a class="link" href="https://www.google.com/search?q=do&amp;#43;a&amp;#43;barrel&amp;#43;roll" target="_blank" rel="noopener"
+>barrel roll&lt;/a>! So I primarily focused on the handling of the player ship. I also knew I only had time to create a tech demo of sorts. The majority of the original game is actually an on the rails shooter, however I figured at the time it was easier to just program a free flying ship just like in the boss areas of the game. This way I could focus on the ship controls, and then later do the compilated rails shooter stuff if I had time; I didn&amp;rsquo;t so good call!&lt;/p>
+&lt;p>In the end, I ended up creating something which consisted of a flat plane where enemies would constantly spawn in the middle, and the player could shoot them down. The Player also had health and when you died, it would be game over. It was quite a simple demo, but the work to get to that point was extensive. I have linked a clip of the game below. Unfortunately the clip doesn&amp;rsquo;t show all the maneuvers you could do in the game and I no longer have access to the PlayStation 4 dev kits to record the game again.&lt;/p>
+&lt;iframe width="560" height="315" src="https://www.youtube.com/embed/9XEttKAj2ak?si=iP7Pk1-EYiZJpoPU" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>&lt;/iframe>
+&lt;p>In the future, I would like to see if I could play the game in a PlayStation 4 emulator . This way I could look back on my code and perhaps have a retrospection on what I&amp;rsquo;ve learnt since working on this project.&lt;/p>
+&lt;p>This project was done under NDA. I still have the source code for it, but until there is a clear indication that it&amp;rsquo;s okay to release the source code, it will remain private.&lt;/p></description></item></channel></rss>
