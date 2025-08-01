@@ -54,10 +54,6 @@ to the DB. This could be done either from the
 existing [Defra flood monitoring API](https://environment.data.gov.uk/flood-monitoring/doc/reference),
 or even contribute new data by being deployed to a real river site and record data in real time.
 
-- [X]  Explain the problem clearly.
-- [X]  Include any constraints or rules.
-- [X]  Describe why it was interesting or difficult.
-
 ## Planning the Environment and Tooling
 
 Before diving into the Flood API implementation, I spent some time setting up my development
@@ -115,9 +111,11 @@ for handling JSON on microcontrollers.
 Addressing considerations #3 and #4 required more effort. I knew I’d be reading my SQLite3 database from a MicroSD card,
 so I needed both a compatible [MicroSD SPI module](https://amzn.eu/d/8WP2FOO) and a library capable of reading SQLite
 databases directly from
-external storage. After some research, I found esp32_arduino_sqlite3_lib, a library developed by siara-cc. It supports
+external storage. After some research, I found [esp32_arduino_sqlite3_lib](https://github.com/siara-cc/esp32_arduino_sqlite3_lib),
+a library developed by **siara-cc**. It supports
 reading SQLite3 databases via various methods, including SPI and MicroSD cards. This library met both of my final
-requirements.
+requirements. I did find that this library is not found within PlatformIOs library search. However, I could import it
+into my project via [git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
 
 ### Other useful tools
 
@@ -158,29 +156,135 @@ Whilst these tools weren't part of the core Flood API functionality, they were v
 moved
 into a common library for reuse in future projects. I won't be covering them in further detail here though.
 
-- [X]  Walk through how you initially thought about the problem.
-- [X]  Did you make any assumptions?
-- [x]  What was your plan of attack?
-
 ## Implementation
 
 > Introduce the implementation paragraph
 
-### Setting up my environment
-
-> Talk about how I set up PlatformIO to flash onto ESP32-E, installing PlatformIO core. Talk about PlatformIO Core
-> allows remote upload and test allowing me to develop without being next to the chip.
-
-### The display and logger
-
-> Talk about how this was not required, but was fundamental in helping debug issues; having a display lets me know that
-> the ESP32-E is responding to HTTP requests including what params are passed. Logging is also useful for more verbose
-> logs.
-
 ### Connecting to SQLite3
 
-> Talk about how initially I started implementing a method to read an SD card. Then I found an SQLite3 library which
-> handles reading from an SD card directly meaning I could stream data off the MicroSD card.
+As [previously mentioned](#key-considerations), I found a crucial SQLite3 library specifically for ESP32 
+microcontrollers which supports accessing SQLite3 database files via SD cards. This library contains a good example of 
+how to read a file from an MicroSD card connected via the SPI module. Before actually reading the data from the
+database file, some setup is required.
+
+To begin, I needed to initialize the SPI bus, and SD library. I also make sure that the SD card is readable:
+
+```c++
+void FloodRepository::init()
+{
+  // Step 1: Initialize SPI and SD
+  LOG.info("Initializing FloodRepository");
+
+  LOG.debug("Beginning SPI");
+  SPI.begin();
+  LOG.debug("Beginning SD ");
+  while (!SD.begin(config::MICRO_SD_CS_PIN))
+  {
+    LOG.error("Card Mount Failed");
+  }
+
+  uint8_t cardType = SD.cardType();
+  if (cardType == CARD_NONE)
+  {
+    LOG.error("No SD card attached");
+    throw std::runtime_error("No SD card attached");
+  }
+
+
+```
+
+Next, I just make sure that the file I am going to be reading the flood data from is actually readable:
+
+```c++
+  // --- Continued: Still inside FloodRepository::init() ---
+  
+  // Step 2: Check the database file exists
+  if (SD.exists(this->m_dbPath))
+  {
+    LOG.debug_f("Database file '%s' exists on SD card", this->m_dbPath);
+    File file = SD.open(this->m_dbPath);
+    LOG.debug_f("File size: %d", file.size());
+    file.close();
+  }
+  else
+  {
+    LOG.error("Database file not found on SD card");
+  }
+
+  ...
+```
+
+Now that I know the SD card is mounted, and the database file is read, it's time to initialize the SQLite3 library:
+
+```c++
+  // --- Continued: Still inside FloodRepository::init() ---
+  
+  // Step 3: Initialize SQLite3
+  LOG.info("Initializing SQLite3...");
+  int initialize = sqlite3_initialize();
+  if (initialize != SQLITE_OK)
+  {
+    LOG.error_f("Failed to initialize SQLite3: %s", initialize);
+    throw std::runtime_error("Failed to initialize SQLite3");
+  }
+  
+  ...
+```
+
+Once the library has been initialized, I open the database file:
+
+```c++
+  // --- Continued: Still inside FloodRepository::init() ---
+  
+  // Step 4: Open database file
+  LOG.debug("Opening DB...");
+  std::stringstream vfsPath;
+  vfsPath << "/sd" << this->m_dbPath;
+  if (openDb(vfsPath.str(), &m_floodDb) != SQLITE_OK)
+  {
+    LOG.error("Failed to open database");
+    throw std::runtime_error("Failed to open database");
+  }
+  LOG.info_f("Connected to database!");
+  
+  ...
+```
+
+Once that is done, the database is actually in a usable state. there is one more thing I do during setup however to 
+better optimize my future calls to the database, and that is cache all station names found within the database to avoid
+doing additional calls:
+
+```c++
+  // --- Continued: Still inside FloodRepository::init() ---
+  
+  // Step 5: Cache station names
+  LOG.debug("Caching station names");
+  auto stationNames = this->getAllStations();
+  if (stationNames.empty())
+  {
+    LOG.error("Failed to get station names");
+    throw std::runtime_error("Failed to get station names");
+  }
+
+  LOG.info("Completed initialization for FloodRepository");
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ### Mapping to something useful
 
