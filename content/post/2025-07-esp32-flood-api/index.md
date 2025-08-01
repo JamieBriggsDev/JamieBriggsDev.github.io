@@ -58,7 +58,12 @@ or even contribute new data by being deployed to a real river site and record da
 - [X]  Include any constraints or rules.
 - [X]  Describe why it was interesting or difficult.
 
-## Initial thoughts & my plan (This could be a better title)
+## Planning the Environment and Tooling
+
+Before diving into the Flood API implementation, I spent some time setting up my development
+environment and selecting the correct tools which would enable me to effectively create the Flood API.
+This section outlines the approach I took, the libraries I researched, and a couple of side tools I
+built along the way that ended up being quite useful, but not essential.
 
 ### The development environment
 
@@ -74,6 +79,21 @@ rather than standalone software. Since I am comfortable with the JetBrains suite
 [CLion](https://www.jetbrains.com/clion/) was perfect for me. The PlatformIO IDE also comes with tools for
 dependency management, unit testing via [GoogleTest](https://github.com/google/googletest), and remote
 upload functionality.
+
+#### Working remotely
+
+Although not essential for microcontroller development itself, PlatformIO’s remote capabilities turned out to be
+particularly useful for this project. By using [PlatformIO Core](https://docs.platformio.org/en/latest/core/index.html)
+(their CLI tool), I was able to connect my ESP32-E to a host machine (an old 2012 iMac in my case) and start a remote
+agent like this:
+
+```shell
+pui remote agent start
+```
+
+With the agent running, I could upload builds, monitor output, and even run tests remotely from any other machine using
+the PlatformIO plugin. This setup was especially helpful since my main development machine is a MacBook Pro. It allowed
+me to work from anywhere without needing to have the microcontroller physically connected at all times.
 
 ### Key considerations
 
@@ -101,13 +121,15 @@ requirements.
 
 ### Other useful tools
 
-Although it was not required for this project, I took the opportunity to build a couple of additional tools that proved 
+Although it was not required for this project, I took the opportunity to build a couple of additional tools that proved
 helpful during development of the Flood API.
 
-First, I wanted to experiment with my 
+First, I wanted to experiment with my
 [LCD1602](https://thepihut.com/products/lcd1602-i2c-module?srsltid=AfmBOorLb8S0ax1tl3QRIeDpDyE0VDgfE2X7FBOmzy0fpz9NUIbVgin_)
-module. Getting feedback on the LCD in response to hitting various Flood API endpoints proved to be quite handy. This was 
-especially useful for showcasing important runtime messages such as IP addresses without having to dig through logs. You'll 
+module. Getting feedback on the LCD in response to hitting various Flood API endpoints proved to be quite handy. This
+was
+especially useful for showcasing important runtime messages such as IP addresses without having to dig through logs.
+You'll
 see it in various portions of my code with command like this:
 
 ```c++
@@ -124,14 +146,16 @@ Serial.println("My log!");
 ```
 
 But since I wanted to be run tests natively on my MacBook, I knew this default logging approach wouldn't work outside
-of the microcontroller environment. So I built a logger that chooses the appropriate logging approach, including log levels 
+of the microcontroller environment. So I built a logger that chooses the appropriate logging approach, including log
+levels
 depending on the target platform:
 
 ```c++
 LOG.debug_f("My log: %d", 125); 
 ```
 
-Whilst these tools weren't part of the core Flood API functionality, they were valuable during development and may be moved
+Whilst these tools weren't part of the core Flood API functionality, they were valuable during development and may be
+moved
 into a common library for reuse in future projects. I won't be covering them in further detail here though.
 
 - [X]  Walk through how you initially thought about the problem.
