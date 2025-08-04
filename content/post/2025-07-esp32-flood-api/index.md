@@ -158,7 +158,13 @@ into a common library for reuse in future projects. I won't be covering them in 
 
 ## Implementation
 
-> Introduce the implementation paragraph
+> [!IMPORTANT]  
+> Missing implementation paragraph
+
+### Initial setup
+
+> [!IMPORTANT]  
+> Talk about connecting to WiFi, and connecting MicroSD SPI module to ESP32.
 
 ### Connecting to SQLite3
 
@@ -190,7 +196,7 @@ void FloodRepository::init()
     throw std::runtime_error("No SD card attached");
   }
 
-
+    ...
 ```
 
 Next, I just make sure that the file I am going to be reading the flood data from is actually readable:
@@ -211,7 +217,7 @@ Next, I just make sure that the file I am going to be reading the flood data fro
     LOG.error("Database file not found on SD card");
   }
 
-  ...
+    ...
 ```
 
 Now that I know the SD card is mounted, and the database file is read, it's time to initialize the SQLite3 library:
@@ -228,7 +234,7 @@ Now that I know the SD card is mounted, and the database file is read, it's time
     throw std::runtime_error("Failed to initialize SQLite3");
   }
   
-  ...
+    ...
 ```
 
 Once the library has been initialized, I open the database file:
@@ -247,7 +253,7 @@ Once the library has been initialized, I open the database file:
   }
   LOG.info_f("Connected to database!");
   
-  ...
+    ...
 ```
 
 Once that is done, the database is actually in a usable state. there is one more thing I do during setup however to 
@@ -270,50 +276,233 @@ doing additional calls:
 }
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ### Mapping to something useful
 
-> Although it's possible to just map the SQLite3 output to a response, I thought it would be nicer to make a mapper
-> which
-> serializes the structs returned from the repository. Just makes testing easier.
+Since my API needs to return JSON, I decided to create an intermediary service to map the objects returned
+by my repository layer into JSON. Using [ArduinoJson](https://arduinojson.org/) made this process painless and 
+straightforward:
+
+```c++
+JsonDocument doc;
+for (const auto& rainfallReading : rainfallReadings)
+{
+    JsonDocument reading;
+    reading["timestamp"] = rainfallReading.timestamp;
+    reading["level"] = rainfallReading.level;
+    reading["station"] = rainfallReading.station;
+    if (!doc["readings"].add(reading))
+    {
+      LOG.error("Failed to add reading");
+      throw std::runtime_error("Failed to add reading");
+    }
+}
+```
+
+To convert this `JsonDocument` into an easy-to-read JSON output, ArduinoJson provides a handy function:
+
+```c++
+std::string json;
+serializeJsonPretty(doc, json);
+LOG.debug(json);
+```
 
 ### Flood routes
 
-> Talk about putting it together using built in Arduino libaries.
+#### Setting up WebServer
+Within the Arduino core libraries for ESP32 is the 
+[WebServer](https://github.com/espressif/arduino-esp32/blob/master/libraries/WebServer/src/WebServer.h) class. This
+class is a "dead simple we-server" which can support `GET` and `POST` HTTP requests; although limited, it is 
+perfect and lightweight for my use case of having a read-only API. 
 
-- [ ]  Step through how you solved the problem
-- [ ]  Include code snippets, terminal outputs, screenshots, or visuals.
-- [ ]  Mention challenges or false starts, and how you handled them.
+The setup for this web server is very simple; all you need is to register a handler to a URI:
 
-> If this is getting long, or there's lots to talk about, break this down into sub sections.
+```c++
+FloodRoutes::FloodRoutes(common::display::IDisplay* display, db::IFloodRepository* flood_repository,
+                         mapper::IFloodMapper* flood_mapper) : m_server(config::PORT), m_display(display),
+                                                                 m_floodRepository(flood_repository),
+                                                                 m_floodMapper(flood_mapper)
+{
+  // Setup routes
+  LOG.debug("Setting up routes...");
+  // GET: /river
+  m_server.on("/river", HTTP_GET,
+              [this]
+              {
+                // Handles the response
+                this->river();
+              });
+    
+    ...
+```
+
+For handling a URI with a path parameter, `UriBraces` becomes useful as a matcher, and then the path parameter
+can be extracted via the `WebServer`:
+
+```c++
+// --- Continued: Still inside FloodRoutes::FloodRoutes() ---
+
+// GET: /rainfall/{stationName}
+  m_server.on(UriBraces("/rainfall/{}"), HTTP_GET,
+              [this]
+              {
+                const auto pathArg = m_server.pathArg(0);
+                const std::string stationName(pathArg.c_str(), pathArg.length());
+                
+                // Handles the response
+                this->rainfallStation(stationName);
+              });
+    ...
+```
+
+Finally, with WebServer setup, the server can be started:
+
+```c++
+// --- Continued: Still inside FloodRoutes::FloodRoutes() ---
+
+  // Begin server
+  LOG.debug("Starting server in FloodRoutes");
+  m_server.begin();
+}
+```
+
+#### Returning content on WebServer
+With `WebServer` now initialized, I needed to send a response to the client. As you may have seen in the 
+[previous section](#setting-up-webserver), as part of handling a URI, I called a function for both `/river` and
+`/rainfall/{stationName}` which handles the response. Both functions are similar in functionality due to how much
+logic is delegated to the [repository layer](#connecting-to-sqlite3) and [mappers](#mapping-to-something-useful). 
+
+The first step is to get any request parameters passed as part of the request. I created a handy function
+which returns the value of a request parameter to help facilitate this. The `getQueryParameter`
+function checks if a request param exists, and extracts it if it does. If the request
+param does not exist, then return a default value:
+```c++
+std::string FloodRoutes::getQueryParameter(const std::string& param, const std::string& defaultValue)
+{
+  // Build string for LCD
+  std::stringstream paramDisplay;
+  paramDisplay << "Param " << param;
+ 
+  // Check if request param is found on request
+  const String paramName(param.c_str());
+  if (!m_server.hasArg(paramName))
+  {
+    LOG.debug_f("Param %s not found", param.c_str());
+    displayParamOnLCD(paramDisplay.str(), defaultValue.empty() ? "EMPTY" : defaultValue);
+    // Return the default value if request param does not exist
+    return defaultValue.empty() ? "" : defaultValue;
+  }
+
+  // Extract request param value
+  const auto paramValue = m_server.arg(paramName);
+  std::string result(paramValue.c_str(), paramValue.length());
+  
+  displayParamOnLCD(paramDisplay.str(), result);
+  
+  return result;
+}
+```
+
+With `getQueryParameter()`, I could get the request parameters at the start of a request:
+```c++
+void FloodRoutes::river()
+{
+  LOG.info("/river requested");
+  m_display->displayText("Calling", "/river", common::display::FLASH);
+  
+  // Get request parameters
+  // Get the date parameter
+  const std::string date = getQueryParameter("start");
+  // Get limit parameter with default value, and convert to int
+  const int limit = std::stoi(getQueryParameter("page", "1"));
+  // Get page parameter with default value, and convert to int
+  const int pagesize = std::stoi(getQueryParameter("pagesize", "12"));
+  
+    ...
+```
+
+Next, data needs to be fetched from the flood repository:
+```c++
+// --- Continued: Still inside FloodRoutes::river() ---
+
+  const std::vector<db::RiverReading> readings 
+    = m_floodRepository->getRiverReadings(date, limit, pagesize);
+    
+    ...
+```
+
+Finally, using my mapper, I could turn this data into JSON and return a response using `WebServer`:
+```c++
+// --- Continued: Still inside FloodRoutes::river() ---
+
+  // Convert to JSON
+  const JsonDocument doc = m_floodMapper->getFloodData(readings);
+  std::string json;
+  serializeJsonPretty(doc, json);
+
+  const char* result = json.c_str();
+
+
+  return m_server.send(200, "application/json", result);
+}
+```
+
+The function for getting rainfalls for a station is very similar, only it has the addition of the path parameter
+from the URI `/rainfall/{stationName}`, and a quick check to ensure that the station passed exists:
+```c++
+void FloodRoutes::rainfallStation(const std::string& stationName)
+{
+  // Get path param station name
+  std::stringstream fullPath;
+  fullPath << "/rainfall/" << stationName;
+  LOG.info_f("/rainfall/{station} requested using %s", stationName);
+  m_display->displayText("Calling", fullPath.str(), common::display::FLASH);
+
+  // You can validate against your known stations
+  if (!m_floodRepository->stationExists(stationName))
+  {
+    m_server.send(404, "application/json", R"({"error": "Invalid station name. Station not found."})");
+    return;
+  }
+
+  // Get request parameters
+  // Get the date parameter
+  const std::string date = getQueryParameter("start", "2022-12-25");
+  // Get limit parameter with default value
+  const int limit = std::stoi(getQueryParameter("page", "1"));
+  // Get page parameter with default value
+  const int pagesize = std::stoi(getQueryParameter("pagesize", "12"));
+
+
+  const std::vector<db::RainfallReading> rainfall_readings =
+      m_floodRepository->getStationRainfallReadings(stationName, date, limit, pagesize);
+
+  // Convert to JSON
+  const JsonDocument doc = m_floodMapper->getRainfallReadings(rainfall_readings);
+  std::string json;
+  serializeJsonPretty(doc, json);
+
+  return m_server.send(200, "application/json", json.c_str());
+}
+```
 
 ## What didn't work
 
+> [!IMPORTANT]  
+> Missing introduction paragraph
+
 ### SQLite3 library uses previous version of SQLite3
 
+> [!IMPORTANT]  
 > Had to create a new SQLite3 file using previous version of SQLite3 by dumping the original file.
 
 ### Partition tables
 
+> [!IMPORTANT]  
 > For a while, the ESP32-E wouldn't work due to size restraints, couldn't run repository and route class same time.
 
 ### aWot library and using built in tools instead
 
+> [!IMPORTANT]  
 > At first I used aWot library, but I found Arduino had stuff built in. Don't slate it.
 
 - [ ]  Share bugs, dead ends, or approaches that failed
@@ -325,6 +514,7 @@ doing additional calls:
 
 > Include .gif files showcasing this!
 
+> [!IMPORTANT]  
 > Include console of test suite.
 
 - [ ]  Present your final working solution
