@@ -19,7 +19,8 @@ links:
 
 # Introduction
 
-Within the developer community practice at Opencast software, once a month we are given a problem to solve. We call this
+Within the developer community practice at [Opencast software](https://opencastsoftware.com/), once a month
+we are given a problem to solve. We call this
 the Learn by Doing initiative. These problems can range in difficulty, however, the premise is always the same: try
 and solve the problem in a language you're not comfortable with or wish to learn more about. The idea behind this
 initiative is that it's a great way to learn a new technology by just tackling a problem head on.
@@ -111,7 +112,8 @@ for handling JSON on microcontrollers.
 Addressing considerations #3 and #4 required more effort. I knew I’d be reading my SQLite3 database from a MicroSD card,
 so I needed both a compatible [MicroSD SPI module](https://amzn.eu/d/8WP2FOO) and a library capable of reading SQLite
 databases directly from
-external storage. After some research, I found [esp32_arduino_sqlite3_lib](https://github.com/siara-cc/esp32_arduino_sqlite3_lib),
+external storage. After some research, I
+found [esp32_arduino_sqlite3_lib](https://github.com/siara-cc/esp32_arduino_sqlite3_lib),
 a library developed by **siara-cc**. It supports
 reading SQLite3 databases via various methods, including SPI and MicroSD cards. This library met both of my final
 requirements. I did find that this library is not found within PlatformIOs library search. However, I could import it
@@ -168,8 +170,8 @@ into a common library for reuse in future projects. I won't be covering them in 
 
 ### Connecting to SQLite3
 
-As [previously mentioned](#key-considerations), I found a crucial SQLite3 library specifically for ESP32 
-microcontrollers which supports accessing SQLite3 database files via SD cards. This library contains a good example of 
+As [previously mentioned](#key-considerations), I found a crucial SQLite3 library specifically for ESP32
+microcontrollers which supports accessing SQLite3 database files via SD cards. This library contains a good example of
 how to read a file from an MicroSD card connected via the SPI module. Before actually reading the data from the
 database file, some setup is required.
 
@@ -256,7 +258,7 @@ Once the library has been initialized, I open the database file:
     ...
 ```
 
-Once that is done, the database is actually in a usable state. there is one more thing I do during setup however to 
+Once that is done, the database is actually in a usable state. there is one more thing I do during setup however to
 better optimize my future calls to the database, and that is cache all station names found within the database to avoid
 doing additional calls:
 
@@ -279,7 +281,7 @@ doing additional calls:
 ### Mapping to something useful
 
 Since my API needs to return JSON, I decided to create an intermediary service to map the objects returned
-by my repository layer into JSON. Using [ArduinoJson](https://arduinojson.org/) made this process painless and 
+by my repository layer into JSON. Using [ArduinoJson](https://arduinojson.org/) made this process painless and
 straightforward:
 
 ```c++
@@ -309,10 +311,11 @@ LOG.debug(json);
 ### Flood routes
 
 #### Setting up WebServer
-Within the Arduino core libraries for ESP32 is the 
+
+Within the Arduino core libraries for ESP32 is the
 [WebServer](https://github.com/espressif/arduino-esp32/blob/master/libraries/WebServer/src/WebServer.h) class. This
-class is a "dead simple we-server" which can support `GET` and `POST` HTTP requests; although limited, it is 
-perfect and lightweight for my use case of having a read-only API. 
+class is a "dead simple we-server" which can support `GET` and `POST` HTTP requests; although limited, it is
+perfect and lightweight for my use case of having a read-only API.
 
 The setup for this web server is very simple; all you need is to register a handler to a URI:
 
@@ -366,15 +369,17 @@ Finally, with WebServer setup, the server can be started:
 ```
 
 #### Returning content on WebServer
-With `WebServer` now initialized, I needed to send a response to the client. As you may have seen in the 
+
+With `WebServer` now initialized, I needed to send a response to the client. As you may have seen in the
 [previous section](#setting-up-webserver), as part of handling a URI, I called a function for both `/river` and
 `/rainfall/{stationName}` which handles the response. Both functions are similar in functionality due to how much
-logic is delegated to the [repository layer](#connecting-to-sqlite3) and [mappers](#mapping-to-something-useful). 
+logic is delegated to the [repository layer](#connecting-to-sqlite3) and [mappers](#mapping-to-something-useful).
 
 The first step is to get any request parameters passed as part of the request. I created a handy function
 which returns the value of a request parameter to help facilitate this. The `getQueryParameter`
 function checks if a request param exists, and extracts it if it does. If the request
 param does not exist, then return a default value:
+
 ```c++
 std::string FloodRoutes::getQueryParameter(const std::string& param, const std::string& defaultValue)
 {
@@ -403,6 +408,7 @@ std::string FloodRoutes::getQueryParameter(const std::string& param, const std::
 ```
 
 With `getQueryParameter()`, I could get the request parameters at the start of a request:
+
 ```c++
 void FloodRoutes::river()
 {
@@ -421,6 +427,7 @@ void FloodRoutes::river()
 ```
 
 Next, data needs to be fetched from the flood repository:
+
 ```c++
 // --- Continued: Still inside FloodRoutes::river() ---
 
@@ -431,6 +438,7 @@ Next, data needs to be fetched from the flood repository:
 ```
 
 Finally, using my mapper, I could turn this data into JSON and return a response using `WebServer`:
+
 ```c++
 // --- Continued: Still inside FloodRoutes::river() ---
 
@@ -448,6 +456,7 @@ Finally, using my mapper, I could turn this data into JSON and return a response
 
 The function for getting rainfalls for a station is very similar, only it has the addition of the path parameter
 from the URI `/rainfall/{stationName}`, and a quick check to ensure that the station passed exists:
+
 ```c++
 void FloodRoutes::rainfallStation(const std::string& stationName)
 {
@@ -490,25 +499,82 @@ void FloodRoutes::rainfallStation(const std::string& stationName)
 > [!IMPORTANT]  
 > Missing introduction paragraph
 
-### SQLite3 library uses previous version of SQLite3
+### SQLite3 library version conflicts
 
-> [!IMPORTANT]  
-> Had to create a new SQLite3 file using previous version of SQLite3 by dumping the original file.
+When I first set up the [repository layer](#connecting-to-sqlite3), I ran into an issue with
+reading the SQLite3 database file. Initially, I suspected it was my own error, but testing with an example
+database from the [SQLite3 library](https://github.com/siara-cc/esp32_arduino_sqlite3_lib) showed that the issue
+was specific to the flood database file I was using.
+
+I knew the file itself was fine - others working on the same challenge were using it without issues - so my next
+suspicion was a compatibility problem with the library. Checking the database version confirmed the file was built with
+SQLite `3.43.2`:
+
+```shell
+% file flood.db
+flood.db: SQLite 3.x database, last written using SQLite version 3043002, writer version 2, read version 2, unused bytes 12, file counter 2378, database pages 6170, cookie 0x18, schema 4, UTF-8, version-valid-for 2378
+```
+
+The library I used was also based on this version, so I expected it to work. However my application logs showed that
+this
+was not the case:
+
+```shell
+[DEBUG] Beginning SPI
+[DEBUG] Beginning SD
+[DEBUG] Database file '/flood.db' exists on SD card
+[DEBUG] File size: 25272320
+[INFO] Initializing SQLite3...
+[DEBUG] Opening DB...
+[INFO] Opened database successfully: /sd/flood.db
+[INFO] Connected to database!
+[DEBUG] Caching station names
+[DEBUG] Preparing query: SELECT * FROM StationNames
+[ERROR] Failed to prepare statement: file is not a database
+```
+
+Locally, `flood.db` opened without issue. So I decided to recreate it myself. First, I dumped the database:
+
+```shell
+% sqlite3 flood.db .dump > flood_dump.sql 
+```
+
+I then downloaded [SQLite 3.43.2](https://github.com/sqlite/sqlite/releases/tag/version-3.43.2),
+and built it from source:
+
+```shell
+% cd sqlite-version-3.43.2/
+sqlite-version-3.43.2 % ./configure 
+sqlite-version-3.43.2 % make 
+```
+
+Finally, I created a new database from the dump:
+
+```shell
+sqlite3 flood_recreated.db < flood_dump.sql
+```
+
+Using this newly created version of the flood database resolved the problem:
+
+```shell
+[INFO] Initializing SQLite3...
+[DEBUG] Opening DB...
+[INFO] Opened database successfully: /sd/flood_recreated.db
+[INFO] Connected to database!
+[DEBUG] Caching station names
+[DEBUG] Preparing query: SELECT * FROM StationNames
+[DEBUG] Stepping through statement
+[DEBUG] Finalizing. Found 11 results.
+[INFO] Completed initialization for FloodRepository
+```
+
+I'm still not so sure as to why the original file failed with this library, but recreating it allowed me to move
+forward.
 
 ### Partition tables
 
 > [!IMPORTANT]  
 > For a while, the ESP32-E wouldn't work due to size restraints, couldn't run repository and route class same time.
-
-### aWot library and using built in tools instead
-
-> [!IMPORTANT]  
-> At first I used aWot library, but I found Arduino had stuff built in. Don't slate it.
-
-- [ ]  Share bugs, dead ends, or approaches that failed
-- [ ]  This helps humanize your post and is super valuable to readers.
-
-> At first, I tried [method], but it turned out to be a dead end because...
 
 ## Final Solution
 
