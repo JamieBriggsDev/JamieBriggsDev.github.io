@@ -16,7 +16,6 @@ links:
     description: If you wish to look at some of my work, have a look at my GitHub account.
     website: https://github.com/JamieBriggsDev
 ---
-
 # Introduction
 
 Within the developer community practice at [Opencast software](https://opencastsoftware.com/), once a month
@@ -160,12 +159,12 @@ into a common library for reuse in future projects. I won't be covering them in 
 
 ## Implementation
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > Missing implementation paragraph
 
 ### Initial setup
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > Talk about connecting to WiFi, and connecting MicroSD SPI module to ESP32.
 
 ### Connecting to SQLite3
@@ -334,7 +333,7 @@ FloodRoutes::FloodRoutes(common::display::IDisplay* display, db::IFloodRepositor
                 // Handles the response
                 this->river();
               });
-    
+  
     ...
 ```
 
@@ -350,7 +349,7 @@ can be extracted via the `WebServer`:
               {
                 const auto pathArg = m_server.pathArg(0);
                 const std::string stationName(pathArg.c_str(), pathArg.length());
-                
+            
                 // Handles the response
                 this->rainfallStation(stationName);
               });
@@ -433,7 +432,7 @@ Next, data needs to be fetched from the flood repository:
 
   const std::vector<db::RiverReading> readings 
     = m_floodRepository->getRiverReadings(date, limit, pagesize);
-    
+  
     ...
 ```
 
@@ -494,12 +493,105 @@ void FloodRoutes::rainfallStation(const std::string& stationName)
 }
 ```
 
-## What didn't work
+## What setbacks did I have
 
-> [!IMPORTANT]  
-> Missing introduction paragraph
+As this was my first embedded project, the implementation wasn't entirely straightforward. A couple of 
+things set myself back and made me reconsider approaches at times. Whilst these issues didn't stop the
+project from completing, it definitely would shape how I design future projects on the ESP32 series of
+microcontrollers.
 
-### SQLite3 library version conflicts
+### Partition tables
+
+The next issue I had with the Flood API was storage. My Firebeetle 2 ESP32-E only contains 4MB of flash memory.
+This does not mean I have 4MB to play with. 
+
+This default partition table ends allowing slightly more than 1MB of storage for your main app. Turns out for 
+the Flood API and the number of dependencies I was using, I needed slightly more than the default:
+
+```shell
+RAM:   [==        ]  17.5% (used 57412 bytes from 327680 bytes)
+Flash: [==========]  115.2% (used 1509853 bytes from 1310720 bytes)
+Error: The program size (1509853 bytes) is greater than maximum allowed (1310720 bytes)
+```
+
+To fix this, you can define your own partition table if you know what you're doing, however there are quite a 
+few default partition tables you can select from which probably fit all possible needs.:
+
+```shell
+jamie.briggs@G0GG60253H LearnByDoing % ls -l $HOME/.platformio/packages/framework-arduinoespressif32/tools/partitions
+total 216
+-rw-r--r--@ 1 jamie.briggs  staff   377  6 Jun  2024 app3M_fat9M_16MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   447  6 Jun  2024 app3M_fat9M_fact512k_16MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   374  6 Jun  2024 app3M_spiffs9M_fact512k_16MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   125  6 Jun  2024 bare_minimum_2MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff  8192  6 Jun  2024 boot_app0.bin
+-rw-r--r--@ 1 jamie.briggs  staff   304  6 Jun  2024 default_16MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   304  6 Jun  2024 default_8MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   305  6 Jun  2024 default_ffat_8MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   304  6 Jun  2024 default_ffat.csv
+-rw-r--r--@ 1 jamie.briggs  staff  3072  6 Jun  2024 default.bin
+-rw-r--r--@ 1 jamie.briggs  staff   304  6 Jun  2024 default.csv
+-rw-r--r--@ 1 jamie.briggs  staff   378  6 Jun  2024 ffat.csv
+-rw-r--r--@ 1 jamie.briggs  staff   259  6 Jun  2024 huge_app.csv
+-rw-r--r--@ 1 jamie.briggs  staff   307  6 Jun  2024 large_fat_32MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   305  6 Jun  2024 large_ffat_8MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   307  6 Jun  2024 large_littlefs_32MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   304  6 Jun  2024 large_spiffs_16MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   305  6 Jun  2024 large_spiffs_8MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   216  6 Jun  2024 max_app_8MB.csv
+-rw-r--r--@ 1 jamie.briggs  staff   303  6 Jun  2024 min_spiffs.csv
+-rw-r--r--@ 1 jamie.briggs  staff   265  6 Jun  2024 minimal.csv
+-rw-r--r--@ 1 jamie.briggs  staff   260  6 Jun  2024 no_ota.csv
+-rw-r--r--@ 1 jamie.briggs  staff   260  6 Jun  2024 noota_3g.csv
+-rw-r--r--@ 1 jamie.briggs  staff   334  6 Jun  2024 noota_3gffat.csv
+-rw-r--r--@ 1 jamie.briggs  staff   334  6 Jun  2024 noota_ffat.csv
+-rw-r--r--@ 1 jamie.briggs  staff   320  6 Jun  2024 rainmaker.csv
+```
+
+The default partition table is split into six partitions:
+
+| Partition Name | Type | Size    | Purpose                                                                         |
+|----------------|------|---------|---------------------------------------------------------------------------------|
+| `nvs`          | data | 20KB    | Non-volatile storage. Usually holds Wi-Fi credentials, or user settings.        |
+| `otadata`      | data | 8KB     | Stores over-the-air update metadata.                                            |
+| `app0`         | app  | 1.25MB  | First firmware slot. Contains the application the user has created (Flood API). |
+| `app1`         | app  | 1.25MB  | Second firmware slot. Used when updating.                                       |
+| `spiffs`       | Data | 1.375MB | File system storage, used for storing assets like logs or data.                 |
+| `coredump`     | Data | 64KB    | Reserved for crash dump data.                                                   |
+
+The key thing here is that there is support for over-the-air updates. Whilst useful, for this project it's 
+unnecessary and I could take that storage for my own use. I also didn't need all the space on `spiffs` partition
+as my SQLite3 database would be stored on a MicroSD card anyway. I went for `huge_app.csv` as it fit all of my needs:
+
+| Partition Name | Type | Size  | Purpose                                                                            |
+|----------------|------|-------|------------------------------------------------------------------------------------|
+| `nvs`          | data | 20KB  | Non-volatile storage. Usually holds Wi-Fi credentials, or user settings.           |
+| `otadata`      | data | 8KB   | Stores over-the-air update metadata. Not used due to lack of second app partition. |
+| `app0`         | app  | 3MB   | The only firmware slot. Contains the application the user has created (Flood API). |
+| `spiffs`       | Data | 896KB | File system storage, used for storing assets like logs or data.                    |
+| `coredump`     | Data | 64KB  | Reserved for crash dump data.                                                      |
+
+This partition table was then added to my `.platformio`:
+
+```yaml
+[env:firebeetle2_esp32e]
+platform = espressif32
+board = dfrobot_firebeetle2_esp32e
+framework = arduino
+test_framework = googletest
+monitor_speed = 115200
+board_build.partitions = huge_app.csv
+```
+
+If I needed even more space for the application, I could have created a custom partition table file and removed `otadata` and
+`spiffs` entirely. However, the defaults provided in `huge_app.csv` were more than sufficient for the projects needs.
+
+This then allows the Flood API to fit on the ESP32-E with plenty of room. Although this meant that I couldn't update 
+the app remotely in a deployed setting, for this project it wasn't in scope. This does, however, highlight a crucial
+drawback to this specific microcontroller when it comes to memory.
+
+
+### SQLite3 compatibility issues
 
 When I first set up the [repository layer](#connecting-to-sqlite3), I ran into an issue with
 reading the SQLite3 database file. Initially, I suspected it was my own error, but testing with an example
@@ -571,16 +663,22 @@ Using this newly created version of the flood database resolved the problem:
 I'm still not so sure as to why the original file failed with this library, but recreating it allowed me to move
 forward.
 
-### Partition tables
+Whilst I did manage to get this working in the end, I did spend a large amount of time exploring other
+database options. This was mainly due to both space constraints, which I explained in the [previous section](#partition-tables).
+At the time, I did not think I could modify partition tables, so I instead tried to find something more lightweight.
 
-> [!IMPORTANT]  
-> For a while, the ESP32-E wouldn't work due to size restraints, couldn't run repository and route class same time.
+Whilst debugging the storage issues I was having, I briefly explored connecting to an external MySQL database. The idea was
+that offloading the search functionality to an external server would mean that the library I'd use for connecting to the database
+would be more lightweight. I did manage to get this working, however, it still didn't fix the underlying storage limitations. In 
+retrospect, if I had fixed the partition tables before trying this, it would've worked completely fine as my tests confirmed. 
+Although this idea was scrapped, it's handy to know it's possible to use an external MySQL database in a RESTful API 
+on a microcontroller.
 
 ## Final Solution
 
 > Include .gif files showcasing this!
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > Include console of test suite.
 
 - [ ]  Present your final working solution
