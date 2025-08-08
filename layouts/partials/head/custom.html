@@ -1,2 +1,5 @@
 <meta name="fediverse:creator" content="@JBriggs_DEV@mastodon.social">
 <link rel="me" href="https://mastodon.social/@JBriggs_DEV"/>
+{{ range .Site.Params.custom_css -}}
+<link rel="stylesheet" href="{{ . | absURL }}">
+{{- end }}

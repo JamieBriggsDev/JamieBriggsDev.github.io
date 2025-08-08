@@ -16,3 +16,6 @@ disqusShortname = "JamieBriggsDev"
 
 [pagination]
 pagerSize = 5
+
+[params]
+custom_css = ["css/extra.css"]
