@@ -1,5 +1,7 @@
 # JBriggs.DEV Portfolio
 
+To run locally, you will need to hav hugo installed.
+
 Run the portfolio locally by running the command:
 
 ```shell
