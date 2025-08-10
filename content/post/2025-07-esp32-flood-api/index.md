@@ -1,7 +1,7 @@
 ---
 draft: true
-title: ESP32-E Flood RESTful API
-description: A RESTful API running on a ESP32-E which reads data from a SQLite3 database.
+title: ESP32-E Flood REST API
+description: A REST API running on a ESP32-E which reads data from a SQLite3 database.
 slug: esp32-flood-api
 date: 2025-08-10 21:38:00+0000
 image: cover.jpeg
@@ -16,6 +16,12 @@ links:
     description: GitHub
     image: https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png
     url: https://github.com/JamieBriggsDev/ESP32-E-Flood-API
+  - title: Firebeetle 2 ESP32-E
+    description: DFRobot
+    website: https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654
+  - title: Defra Flood Monitoring API
+    description: Department for Environment Food & Rural Affairs
+    website: https://environment.data.gov.uk/flood-monitoring/doc/reference
 ---
 
 # Introduction
@@ -26,40 +32,46 @@ the Learn by Doing initiative. These problems can range in difficulty, however, 
 and solve the problem in a language you're not comfortable with or wish to learn more about. The idea behind this
 initiative is that it's a great way to learn a new technology by just tackling a problem head on.
 
-For July's Learn by Doing problem, we were tasked with creating a RESTful API which returns river levels and rainfall
-levels. In this post, I'll explore why I went with a Firebeetle 2 ESP32-E microcontroller, how did I implement this
+For July's Learn by Doing problem, we were tasked with creating a
+[REST API](https://www.redhat.com/en/topics/api/what-is-a-rest-api) which returns river and rainfall
+levels. In this post, I'll explore why I went with a
+[Firebeetle 2 ESP32-E](https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654), how did I implement this
 solution, and what I learnt from it.
+
+Within this read, I'll cover implementing the Flood API, the tools I used to implement it, and some of the challenges
+I faced along the way.
 
 ## The problem
 
-As previously mentioned, the problem revolved around creating a RESTful API. To implement this, I was provided an
-[OpenAPI 3.1](https://github.com/JamieBriggsDev/ESP32-E-Flood-API/blob/main/openapi.yaml) contract to follow, and a test
-suite to
-ensure that the API we have built works as expected. As for data for this API, I was also provided with a SQLite3
-database
-containing data captured
+As previously mentioned, the problem revolved around creating a REST API. To implement this, I was provided an
+[OpenAPI 3.1](https://github.com/JamieBriggsDev/ESP32-E-Flood-API/blob/main/openapi.yaml) contract to follow.
+As for data for this API, I was also provided with an [SQLite3](https://sqlite.org/) database containing data captured
 from [Defra's flood monitoring API](https://environment.data.gov.uk/flood-monitoring/doc/reference) that was captured
 every day over two years.
 
-The only constraint to this (aside from following the OpenAPI speci) was that a test suite should
-pass when pointed to the RESTful API I have created.
+The only constraint to this (aside from following the OpenAPI specification) was that a test suite should
+pass when pointed to the REST API I have created. This test suite was created
+by [Rob Anderson](https://robanderson.dev),
+who created this challenge.
 
 Given I was allowed to use any technology I wished, I decided to tackle this project using a
-[Firebeetle 2 ESP32-E](https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654)
-microcontroller. While I've owned this microcontroller for a couple of years with the idea to incorporate it into a
+Firebeetle 2 ESP32-E microcontroller. While I've owned this microcontroller for a couple of years with the idea
+to incorporate it into a
 future [Home Assistant](https://www.home-assistant.io/) setup, I hesitated due to not having a 3D printer to create
 protective enclosures for home deployment. This Learn by Doing challenge
 presented the perfect opportunity to work with the ESP32-E as the requirements of the problem (i.e. networking and
 database operations) aligned well with my future home automation plans.
 
 This was an incredibly interesting challenge due to the nature of working with a Firebeetle 2 ESP32-E. Although this
-microcontroller is low-powered and slow compared to your usual server, it is also very portable. The scope of the
-problem was to read river and flood levels from a DB, yet it could easily be extended to write new flood information
+microcontroller is low-powered and slow compared to your usual host for a REST API, it is also very portable. The scope
+of the
+problem was to read river and rainfall levels from a database, yet it could easily be extended to write new flood
+information
 to the database. This could be done either from the
 existing [Defra flood monitoring API](https://environment.data.gov.uk/flood-monitoring/doc/reference),
 or even contribute new data by being deployed to a real river site and record data in real time.
 
-## Planning the Environment and Tooling
+## Planning the environment and tooling
 
 Before diving into the Flood API implementation, I spent some time setting up my development
 environment and selecting the correct tools which would enable me to effectively create the Flood API.
@@ -73,10 +85,11 @@ option is the [Arduino IDE](https://www.arduino.cc/en/software/)—a beginner-fr
 Arduino microcontrollers. Whilst it's great for simple projects, it becomes quite limited
 when it comes to dependency management or more complex projects.
 
-As an alternative, I opted for PlatformIO which builds what Arduino IDE can do, but more. PlatformIO IDE
+As an alternative, I opted for PlatformIO which builds on what Arduino IDE can do, but more. PlatformIO IDE
 tends to come as a plugin for [CLion](https://www.jetbrains.com/clion/)
 or [Visual Studio Code](https://code.visualstudio.com/)
-rather than standalone software. Since I am comfortable with the JetBrains suite of IDEs, being able to use
+rather than standalone software. Since I am comfortable with the
+[JetBrains suite of products](https://www.jetbrains.com/), being able to use
 CLion was perfect for me. The PlatformIO IDE also comes with tools for
 dependency management, unit testing via [GoogleTest](https://github.com/google/googletest), and remote
 upload functionality.
@@ -94,11 +107,15 @@ agent like this:
 
 With the agent running, I could upload builds, monitor output, and even run tests remotely from any other machine using
 the PlatformIO plugin. This setup was especially helpful since my main development machine is a MacBook Pro. It allowed
-me to work from anywhere without needing to have the microcontroller physically connected at all times.
+me to work from anywhere without needing to have the microcontroller physically connected at all times. The main
+PlatformIO plugin doesn't actually have options for remote development despite it being available in PlatformIO Core.
+Fortunately, the [Platformio Plus](https://plugins.jetbrains.com/plugin/20232-platformio-plus) plugin does.
+
+![Remote development options via the Pio Plus Plugin](images/remoteDevelopmentPanel.png)
 
 ### Key considerations
 
-The next step was to think about libraries I would need to. I had four main considerations:
+The next step was to think about libraries I would need to use. I had four main considerations:
 
 1. How do I expose a web app?
 2. How can I serialize an object into JSON?
@@ -109,9 +126,9 @@ The next step was to think about libraries I would need to. I had four main cons
 PlatformIO plugin that helps configure projects. The user interface includes a library search
 feature, which I used to address my first two considerations.
 
-For exposing HTTP endpoints (consideration #1), I quickly found a few libraries that provide web server functionality.
-For JSON serialization (consideration #2), I came across ArduinoJson, which is widely regarded as the standard library
-for handling JSON on microcontrollers.
+For exposing HTTP endpoints (consideration #1), I quickly found a few Arduino libraries that provide web server
+functionality. For JSON serialization (consideration #2), I came across ArduinoJson, which is widely regarded as the
+standard library for handling JSON on microcontrollers.
 
 Addressing considerations #3 and #4 required more effort. I knew I’d be reading my SQLite3 database from a MicroSD card,
 so I needed both a compatible [MicroSD SPI module](https://amzn.eu/d/8WP2FOO) and a library capable of reading SQLite
@@ -119,7 +136,8 @@ databases directly from
 external storage. After some research, I
 found [esp32_arduino_sqlite3_lib](https://github.com/siara-cc/esp32_arduino_sqlite3_lib),
 a library developed by **siara-cc**. It supports
-reading SQLite3 databases via various methods, including SPI and MicroSD cards. This library met both of my final
+reading SQLite3 databases via various methods,
+including MicroSD cards via [SPI](https://en.wikipedia.org/wiki/Serial_Peripheral_Interface). This library met both of my final
 requirements. I did find that this library is not found within PlatformIOs library search. However, I could import it
 into my project via [git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
 
@@ -148,13 +166,30 @@ I also created a cross-platform logger library. Usually, logging on a microcontr
 Serial.println("My log!");
 ```
 
-But since I wanted to be run tests natively on my MacBook, I knew this default logging approach wouldn't work outside
+But since I wanted to run tests natively on my MacBook, I knew this default logging approach wouldn't work outside
 of the microcontroller environment. So I built a logger that chooses the appropriate logging approach, including log
-levels
-depending on the target platform:
+levels depending on the target platform:
 
 ```c++
 LOG.debug_f("My log: %d", 125); 
+```
+
+With the `LOG` macro defined like so:
+```c++
+#if defined(ARDUINO) || defined(ESP32)
+
+
+#include "LoggerSerial.h"
+// Uses Serial.printLn() for logging
+#define LOG jbriggs::common::logger::LoggerSerial::getInstance()
+
+#else
+
+#include "Logger.h"
+// Uses cout for logging
+#define LOG jbriggs::common::logger::Logger::getInstance()
+
+#endif
 ```
 
 Whilst these tools weren't part of the core Flood API functionality, they were valuable during development and may be
@@ -162,14 +197,16 @@ moved
 into a common library for reuse in future projects. I won't be covering them in further detail here though.
 
 ## Implementation
+
 Now that I had my development environment setup, it was time to start the implementation of the Flood API. Within this
-section, I'll go through the various steps I took to implement the Flood API. This will include setting up the 
+section, I'll go through the various steps I took to implement the Flood API. This will include setting up the
 device and its connections, connecting to the SQLite3 database, and creating a response which will be returned to the
 client.
 
 ### Initial setup
 
-Before touching any code, I needed to setup my ESP32-E microcontroller by connecting the MicroSD SPI module to the
+Before touching any code, I needed to setup my ESP32-E microcontroller by connecting the 
+[MicroSD SPI module](https://amzn.eu/d/7oocRs7) to the
 correct pins. The pinout for the ESP32-E is can be found on the
 [DFRobot website](https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654#6.%20Pinout). The MicroSD SPI
 module I have contains six pins which all need to be connected to the ESP32-E.
@@ -191,7 +228,7 @@ All but one of the pins have a specific pin they should be connected to on the E
 
 ### Connecting to my local network
 
-Since the device needs to be accessible from my network, I needed to setup my WiFi connection. I used the
+Since the device needs to be accessible from within my home network, I needed to setup my WiFi connection. I used the
 [Arduino WifiClient](https://docs.arduino.cc/language-reference/en/functions/wifi/client/) library to do this. This
 library provides a simple way to setup WiFi credentials, and then automatically connect to the network:
 
@@ -207,6 +244,7 @@ LOG.debug_f("Connected to WiFi: %s", WiFi.localIP().toString().c_str());
 ```
 
 I also displayed the IP address of the ESP32-E on the LCD, and the port number of the API:
+
 ```c++
 // Display IP and PORT number
 std::ostringstream portMessage;
@@ -218,8 +256,8 @@ common::display::STICKY);
 ### Connecting to SQLite3
 
 As [previously mentioned](#key-considerations), I found a crucial SQLite3 library specifically for ESP32
-microcontrollers which supports accessing SQLite3 database files via SD cards. This library contains a good example of
-how to read a file from an MicroSD card connected via the SPI module. Before actually reading the data from the
+microcontrollers which supports accessing SQLite3 database files via SD cards. A lot of my implementation here
+follows a good example which the library provides. Before actually reading the data from the
 database file, some setup is required.
 
 To begin, I needed to initialize the SPI bus, and SD library. I also make sure that the SD card is readable:
@@ -361,10 +399,10 @@ LOG.debug(json);
 
 Within the Arduino core libraries for ESP32 is the
 [WebServer](https://github.com/espressif/arduino-esp32/blob/master/libraries/WebServer/src/WebServer.h) class. This
-class is a "dead simple we-server" which can support `GET` and `POST` HTTP requests; although limited, it is
+class is a "dead simple web-server" that supports `GET` and `POST` HTTP methods; although limited, it is
 perfect and lightweight for my use case of having a read-only API.
 
-The setup for this web server is very simple; all you need is to register a handler to a URI:
+The setup for this web server is basic; all you need is to register a handler to a URI:
 
 ```c++
 FloodRoutes::FloodRoutes(common::display::IDisplay* display, db::IFloodRepository* flood_repository,
@@ -418,7 +456,7 @@ Finally, with WebServer setup, the server can be started:
 #### Returning content on WebServer
 
 With `WebServer` now initialized, I needed to send a response to the client. As you may have seen in the
-[previous section](#setting-up-webserver), as part of handling a URI, I called a function for both `/river` and
+[Setting up WebServer](#setting-up-webserver), as part of handling a URI, I called a function for both `/river` and
 `/rainfall/{stationName}` which handles the response. Both functions are similar in functionality due to how much
 logic is delegated to the [repository layer](#connecting-to-sqlite3) and [mappers](#mapping-to-something-useful).
 
@@ -713,7 +751,7 @@ forward.
 
 Whilst I did manage to get this working in the end, I did spend a large amount of time exploring other
 database options. This was mainly due to both space constraints, which I explained in
-the [previous section](#partition-tables).
+the [Partition tables](#partition-tables) section.
 At the time, I did not think I could modify partition tables, so I instead tried to find something more lightweight.
 
 Whilst debugging the storage issues I was having, I briefly explored connecting to an external MySQL database. The idea
@@ -724,28 +762,17 @@ would be more lightweight. I did manage to get this working, however, it still d
 limitations. In
 retrospect, if I had fixed the partition tables before trying this, it would've worked completely fine as my tests
 confirmed.
-Although this idea was scrapped, it's handy to know it's possible to use an external MySQL database in a RESTful API
+Although this idea was scrapped, it's handy to know it's possible to use an external MySQL database in a REST API
 on a microcontroller.
 
-## The final product
+## The final implementation
 
 After a lot of work, the final Flood API was complete. With the ESP32-E started, I could connect to the API which
 I had implemented.
 
 ![Calling the endpoint /river endpoint with three request parameters](images/IMG_2613.gif)
 
-To test the API, I was provided with a test suite, which I could call to know if what I've done was working:
-
-```shell
-% ./FloodApiTests http://192.168.1.249:80
-```
-
-On first inspection the test suite works as expected, however, I did notice that some tests were failing. After
-some investigation, I found that they were failing due to performance issues and the test suite was timing out. With
-this in mind, I decided to ignore those failing tests and call it a success. This timeout is only due to multiple 
-requests being made at once, and the ESP32-E is not powerful enough to handle them. I also verified this by hitting
-the endpoint manually, and it worked as expected without the test suite running at the time:
-
+With my ESP32-E powered on, I could make a request to the `/river` endpoint with three parameters:
 ```shell
 % curl -X GET "http://192.168.1.249:80/river?start=2022-12-25&page=1&pagesize=12"
 {
@@ -802,6 +829,58 @@ the endpoint manually, and it worked as expected without the test suite running 
 }
 ```
 
+And I could make a request to the `/rainfall/{stationName}` endpoint with a parth variable, and two request parameters:
+```shell
+% curl -X GET "http://192.168.1.249:80/rainfall/acomb-codlaw-hill?start=2024-02-01&page=101&pagesize=6"
+{
+  "readings": [
+    {
+      "timestamp": "2024-02-09T01:30:00Z",
+      "level": 0.2,
+      "station": "acomb-codlaw-hill"
+    },
+    {
+      "timestamp": "2024-02-09T01:45:00Z",
+      "level": 0.2,
+      "station": "acomb-codlaw-hill"
+    },
+    {
+      "timestamp": "2024-02-09T02:00:00Z",
+      "level": 0.2,
+      "station": "acomb-codlaw-hill"
+    },
+    {
+      "timestamp": "2024-02-09T02:15:00Z",
+      "level": 0.2,
+      "station": "acomb-codlaw-hill"
+    },
+    {
+      "timestamp": "2024-02-09T02:30:00Z",
+      "level": 0.2,
+      "station": "acomb-codlaw-hill"
+    },
+    {
+      "timestamp": "2024-02-09T02:45:00Z",
+      "level": 0.2,
+      "station": "acomb-codlaw-hill"
+    }
+  ]
+}
+```
+
+To ensure the API worked as expected, I ran the [provided test suite](#the-problem), which I could call to know if 
+what I've done was working:
+
+```shell
+% ./FloodApiTests http://192.168.1.249:80
+```
+
+On first inspection the test suite works as expected, however, I did notice that some tests were failing. After
+some investigation, I found that they were failing due to performance issues and the test suite was timing out. With
+this in mind, I decided to ignore those failing tests and call it a success. This timeout is only due to multiple
+requests being made at once, and the ESP32-E is not powerful enough to handle them. I also verified this by hitting
+the endpoint manually.
+
 ## What I learned
 
 The purpose of the Learn by Doing initiative is to undertake a project in a language or technology of your choice.
@@ -825,7 +904,7 @@ limited and always will be. Knowing that I could use an external storage device,
 explore how I could use this to store data. In this project I used it to store the SQLite3 database and could easily
 write to that database as well if I were to record data instead.
 
-The last thing I learnt was just how straightforward it is to set up a RESTful API on an ESP32-E. Using the
+The last thing I learnt was just how straightforward it is to set up a REST API on an ESP32-E. Using the
 [ESP32 WebServer](https://github.com/espressif/arduino-esp32/tree/master/libraries/WebServer) library-as seen within
 the [flood routes](#flood-routes) section-I was able to quickly build an API which could be used to
 retrieve data from the SQLite3 database. While most of my use cases for the ESP32-E revolve around home automation,
