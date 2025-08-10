@@ -24,7 +24,6 @@ links:
 ---
 
 # Introduction
-
 Within the developer community practice at [Opencast software](https://opencastsoftware.com/), once a month
 we are given a problem to solve. We call this
 the Learn by Doing initiative. These problems can range in difficulty, however, the premise is always the same: try
