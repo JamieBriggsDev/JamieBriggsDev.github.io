@@ -2,7 +2,7 @@
 title: ESP32-E Flood REST API
 description: A REST API running on a ESP32-E which reads data from a SQLite3 database.
 slug: esp32-flood-api
-date: 2025-08-10 21:38:00+0000
+date: 2025-08-14 21:38:00+0000
 image: cover.jpeg
 categories:
   - opencast
@@ -24,6 +24,7 @@ links:
 ---
 
 # Introduction
+
 Within the developer community practice at [Opencast software](https://opencastsoftware.com/), once a month
 we are given a problem to solve. We call this
 the Learn by Doing initiative. These problems can range in difficulty, however, the premise is always the same: try
@@ -34,7 +35,7 @@ For July's Learn by Doing problem, we were tasked with creating a
 [REST API](https://www.redhat.com/en/topics/api/what-is-a-rest-api) which returns river and rainfall
 levels. In this post, I'll explore why I went with a
 [Firebeetle 2 ESP32-E](https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654), how did I implement this
-solution, and what I learnt from it.
+solution using [C++](https://cplusplus.com), and what I learnt from it.
 
 Within this read, I'll cover implementing the Flood API, the tools I used to implement it, and some of the challenges
 I faced along the way.
@@ -71,7 +72,7 @@ or even contribute new data by being deployed to a real river site and record da
 
 ## Planning the environment and tooling
 
-Before diving into the Flood API implementation, I spent some time setting up my development
+Prior to diving into the Flood API implementation, I spent some time setting up my development
 environment and selecting the correct tools which would enable me to effectively create the Flood API.
 This section outlines the approach I took, the libraries I researched, and a couple of side tools I
 built along the way that ended up being quite useful, but not essential.
@@ -135,7 +136,8 @@ external storage. After some research, I
 found [esp32_arduino_sqlite3_lib](https://github.com/siara-cc/esp32_arduino_sqlite3_lib),
 a library developed by **siara-cc**. It supports
 reading SQLite3 databases via various methods,
-including MicroSD cards via [SPI](https://en.wikipedia.org/wiki/Serial_Peripheral_Interface). This library met both of my final
+including MicroSD cards via [SPI](https://en.wikipedia.org/wiki/Serial_Peripheral_Interface). This library met both of
+my final
 requirements. I did find that this library is not found within PlatformIOs library search. However, I could import it
 into my project via [git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
 
@@ -173,6 +175,7 @@ LOG.debug_f("My log: %d", 125);
 ```
 
 With the `LOG` macro defined like so:
+
 ```c++
 #if defined(ARDUINO) || defined(ESP32)
 
@@ -203,7 +206,7 @@ client.
 
 ### Initial setup
 
-Before touching any code, I needed to setup my ESP32-E microcontroller by connecting the 
+Before touching any code, I needed to setup my ESP32-E microcontroller by connecting the
 [MicroSD SPI module](https://amzn.eu/d/7oocRs7) to the
 correct pins. The pinout for the ESP32-E is can be found on the
 [DFRobot website](https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654#6.%20Pinout). The MicroSD SPI
@@ -235,8 +238,8 @@ WiFiClass::mode(WIFI_STA);
 WiFi.begin(flood::config::WIFI_SSID, flood::config::WIFI_PASSWORD);
 while (WiFiClass::status() != WL_CONNECTED)
 {
-delay(500);
-display->displayText("Connecting..", common::display::FLASH);
+    delay(500);
+    display->displayText("Connecting..", common::display::FLASH);
 }
 LOG.debug_f("Connected to WiFi: %s", WiFi.localIP().toString().c_str());
 ```
@@ -771,6 +774,7 @@ I had implemented.
 ![Calling the endpoint /river endpoint with three request parameters](images/IMG_2613.gif)
 
 With my ESP32-E powered on, I could make a request to the `/river` endpoint with three parameters:
+
 ```shell
 % curl -X GET "http://192.168.1.249:80/river?start=2022-12-25&page=1&pagesize=12"
 {
@@ -828,6 +832,7 @@ With my ESP32-E powered on, I could make a request to the `/river` endpoint with
 ```
 
 And I could make a request to the `/rainfall/{stationName}` endpoint with a parth variable, and two request parameters:
+
 ```shell
 % curl -X GET "http://192.168.1.249:80/rainfall/acomb-codlaw-hill?start=2024-02-01&page=101&pagesize=6"
 {
@@ -866,7 +871,7 @@ And I could make a request to the `/rainfall/{stationName}` endpoint with a part
 }
 ```
 
-To ensure the API worked as expected, I ran the [provided test suite](#the-problem), which I could call to know if 
+To ensure the API worked as expected, I ran the [provided test suite](#the-problem), which I could call to know if
 what I've done was working:
 
 ```shell
@@ -881,8 +886,9 @@ the endpoint manually.
 
 ## What I learned
 
-The purpose of the Learn by Doing initiative is to undertake a project in a language or technology of your choice.
-This is a great way to learn a new skill or technique, and this project was no exception. I gained a lot of experience
+The purpose of the Learn by Doing initiative is to undertake a project in a language or technology that would challenge
+you. This is a great way to learn a new skill or technique, and this project was no exception. I gained a lot of
+experience
 working with the ESP32-E, understanding what it can do, and how to use it effectively. The main goal of using this
 microcontroller was to explore how it could be used in a home automation context, and I'm happy to know that it could
 be used in this way.
@@ -931,6 +937,6 @@ cost-effective.
 ## Wrap up
 
 I would like to thank to [Rob Anderson](https://robanderson.dev/) for creating July's Learn by doing challenge, it
-was incredibly interesting! July's Learn by doing project at Opencast software proved to be incredibly interesting. This
-project was a great way to
-explore the ESP32-E, and I'm looking forward to exploring more of its capabilities in the future.
+was incredibly interesting! This
+project was a great way to understand embedded systems, and I'm looking forward to exploring more of the capabilities of
+the Firebeetle 2 ESP32-E in the future.
