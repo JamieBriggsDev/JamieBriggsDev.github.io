@@ -2,7 +2,7 @@
 title: ESP32-E Flood REST API
 description: A REST API running on a ESP32-E which reads data from a SQLite3 database.
 slug: esp32-flood-api
-date: 2025-08-14 21:38:00+0000
+date: 2025-08-14 20:38:00+0000
 image: cover.jpeg
 categories:
   - opencast
