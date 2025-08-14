@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Game Jams on JBriggs.DEV</title><link>https://jbriggs.dev/categories/game-jam/</link><description>Recent content in Game Jams on JBriggs.DEV</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Sun, 14 Apr 2019 00:00:00 +0000</lastBuildDate><atom:link href="https://jbriggs.dev/categories/game-jam/index.xml" rel="self" type="application/rss+xml"/><item><title>Ludum Dare 44 - Nine Lives</title><link>https://jbriggs.dev/p/2019-04-ludum-dare-44/</link><pubDate>Sun, 14 Apr 2019 00:00:00 +0000</pubDate><guid>https://jbriggs.dev/p/2019-04-ludum-dare-44/</guid><description>&lt;img src="https://jbriggs.dev/p/2019-04-ludum-dare-44/cover.png" alt="Featured image of post Ludum Dare 44 - Nine Lives" />&lt;p>For anyone who is unaware, Ludum Dare is a bi-annual game jam where participants take
+part in creating a game for a common theme which tends to be announced the moment the
+event starts. From this point, participants receive 48 hours to create and submit their
+game.&lt;/p>
+&lt;p>For Ludum Dare 44, the theme was &amp;ldquo;Your life is currency&amp;rdquo;. With this being my first
+game jam, I didn&amp;rsquo;t rush into creating the game and I instead brainstormed for probably
+a bit too long which wasted most of first day. In hindsight, I should&amp;rsquo;ve just started
+creating something, even if it was just the basic structure of a video game (i.e.
+menus and game systems).&lt;/p>
+&lt;p>Once I had an idea, I finally spent the remaining time rushing a game out. I learnt
+a fair amount about Unity development (this was my first in depth foray into Unity) and
+I published something which I think was in theme. I also learnt quite a lot about
+deploying and publishing embedded Unity games using &lt;a class="link" href="https://itch.io/" target="_blank" rel="noopener"
+>itch.io&lt;/a>.&lt;/p>
+&lt;p>The game I finally created was called &amp;ldquo;Nine Lives&amp;rdquo;. Given the theme of the game jam
+was &amp;ldquo;Your life is currency&amp;rdquo;, I decided I could play on the common expression that cats
+have 9 lives. The game itself is a bit of a linear roguelike, inspired by earlier
+The Legend of Zelda games, where you go from room to room. This game was an endless
+runner and consisted of yourself running around as a cat shooting balls of wool
+at oversized rats. In the game, you can score points by killing rats, and sometimes
+collect more hearts to keep your life up.&lt;/p>
+&lt;p>In the end, although I did follow the theme slightly, it wasn&amp;rsquo;t a very strong submission.
+There wasn&amp;rsquo;t really much of an idea of currency, and although you had a life total in game,
+it was more of a health bar as opposed to a currency of sorts. I did however learn quite
+a lot about game development, and how Unity handles collisions and scenes. I also learnt
+more about the sprite program Asprite. This was my first ever instance of using this program,
+and I thoroughly recommend it to create in game assets in pixel form as it&amp;rsquo;s super easy to use!&lt;/p>
+&lt;p>Below is my submission for the Ludum Dare 44!&lt;/p>
+&lt;iframe frameborder="0" src="https://itch.io/embed-upload/2809833?color=333333" allowfullscreen="" width="100%" height="704">&lt;/iframe>
+&lt;p>There are three takeaways which I learnt when it comes to tackling future game jams. The first
+takeaway is to not spend too much time trying to think of the best idea to submit something.
+48 hours is really not much time for creating a game, so if you don&amp;rsquo;t have an idea, at least start
+creating something.&lt;/p>
+&lt;p>The second thing I took away from this experience was that you don&amp;rsquo;t need to create
+something perfect. In my head for this submission, I wanted a completed game to show off,
+so I went for an endless runner based game. However after looking at other submissions, other
+games were essentially tech demos, or a first level of sorts. Due to this, they
+were much more refined.&lt;/p>
+&lt;p>Finally, the main takeaway was that game jams are there to learn something new. It&amp;rsquo;s okay to
+not submit something as really, a game jam is just a fun excuse to learn something new and
+create something along the way!&lt;/p></description></item></channel></rss>

@@ -1,0 +1,1690 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on JBriggs.DEV</title><link>https://jbriggs.dev/post/</link><description>Recent content in Posts on JBriggs.DEV</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Thu, 14 Aug 2025 20:38:00 +0000</lastBuildDate><atom:link href="https://jbriggs.dev/post/index.xml" rel="self" type="application/rss+xml"/><item><title>ESP32-E Flood REST API</title><link>https://jbriggs.dev/p/esp32-flood-api/</link><pubDate>Thu, 14 Aug 2025 20:38:00 +0000</pubDate><guid>https://jbriggs.dev/p/esp32-flood-api/</guid><description>&lt;img src="https://jbriggs.dev/p/esp32-flood-api/cover.jpeg" alt="Featured image of post ESP32-E Flood REST API" />&lt;h1 id="introduction">Introduction
+&lt;/h1>&lt;p>Within the developer community practice at &lt;a class="link" href="https://opencastsoftware.com/" target="_blank" rel="noopener"
+>Opencast software&lt;/a>, once a month
+we are given a problem to solve. We call this
+the Learn by Doing initiative. These problems can range in difficulty, however, the premise is always the same: try
+and solve the problem in a language you&amp;rsquo;re not comfortable with or wish to learn more about. The idea behind this
+initiative is that it&amp;rsquo;s a great way to learn a new technology by just tackling a problem head on.&lt;/p>
+&lt;p>For July&amp;rsquo;s Learn by Doing problem, we were tasked with creating a
+&lt;a class="link" href="https://www.redhat.com/en/topics/api/what-is-a-rest-api" target="_blank" rel="noopener"
+>REST API&lt;/a> which returns river and rainfall
+levels. In this post, I&amp;rsquo;ll explore why I went with a
+&lt;a class="link" href="https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654" target="_blank" rel="noopener"
+>Firebeetle 2 ESP32-E&lt;/a>, how did I implement this
+solution using &lt;a class="link" href="https://cplusplus.com" target="_blank" rel="noopener"
+>C++&lt;/a>, and what I learnt from it.&lt;/p>
+&lt;p>Within this read, I&amp;rsquo;ll cover implementing the Flood API, the tools I used to implement it, and some of the challenges
+I faced along the way.&lt;/p>
+&lt;h2 id="the-problem">The problem
+&lt;/h2>&lt;p>As previously mentioned, the problem revolved around creating a REST API. To implement this, I was provided an
+&lt;a class="link" href="https://github.com/JamieBriggsDev/ESP32-E-Flood-API/blob/main/openapi.yaml" target="_blank" rel="noopener"
+>OpenAPI 3.1&lt;/a> contract to follow.
+As for data for this API, I was also provided with an &lt;a class="link" href="https://sqlite.org/" target="_blank" rel="noopener"
+>SQLite3&lt;/a> database containing data captured
+from &lt;a class="link" href="https://environment.data.gov.uk/flood-monitoring/doc/reference" target="_blank" rel="noopener"
+>Defra&amp;rsquo;s flood monitoring API&lt;/a> that was captured
+every day over two years.&lt;/p>
+&lt;p>The only constraint to this (aside from following the OpenAPI specification) was that a test suite should
+pass when pointed to the REST API I have created. This test suite was created
+by &lt;a class="link" href="https://robanderson.dev" target="_blank" rel="noopener"
+>Rob Anderson&lt;/a>,
+who created this challenge.&lt;/p>
+&lt;p>Given I was allowed to use any technology I wished, I decided to tackle this project using a
+Firebeetle 2 ESP32-E microcontroller. While I&amp;rsquo;ve owned this microcontroller for a couple of years with the idea
+to incorporate it into a
+future &lt;a class="link" href="https://www.home-assistant.io/" target="_blank" rel="noopener"
+>Home Assistant&lt;/a> setup, I hesitated due to not having a 3D printer to create
+protective enclosures for home deployment. This Learn by Doing challenge
+presented the perfect opportunity to work with the ESP32-E as the requirements of the problem (i.e. networking and
+database operations) aligned well with my future home automation plans.&lt;/p>
+&lt;p>This was an incredibly interesting challenge due to the nature of working with a Firebeetle 2 ESP32-E. Although this
+microcontroller is low-powered and slow compared to your usual host for a REST API, it is also very portable. The scope
+of the
+problem was to read river and rainfall levels from a database, yet it could easily be extended to write new flood
+information
+to the database. This could be done either from the
+existing &lt;a class="link" href="https://environment.data.gov.uk/flood-monitoring/doc/reference" target="_blank" rel="noopener"
+>Defra flood monitoring API&lt;/a>,
+or even contribute new data by being deployed to a real river site and record data in real time.&lt;/p>
+&lt;h2 id="planning-the-environment-and-tooling">Planning the environment and tooling
+&lt;/h2>&lt;p>Prior to diving into the Flood API implementation, I spent some time setting up my development
+environment and selecting the correct tools which would enable me to effectively create the Flood API.
+This section outlines the approach I took, the libraries I researched, and a couple of side tools I
+built along the way that ended up being quite useful, but not essential.&lt;/p>
+&lt;h3 id="the-development-environment">The development environment
+&lt;/h3>&lt;p>Before I started writing any code, I needed to decide what development environment I should use. The usual go-to
+option is the &lt;a class="link" href="https://www.arduino.cc/en/software/" target="_blank" rel="noopener"
+>Arduino IDE&lt;/a>—a beginner-friendly platform primarily designed for
+Arduino microcontrollers. Whilst it&amp;rsquo;s great for simple projects, it becomes quite limited
+when it comes to dependency management or more complex projects.&lt;/p>
+&lt;p>As an alternative, I opted for PlatformIO which builds on what Arduino IDE can do, but more. PlatformIO IDE
+tends to come as a plugin for &lt;a class="link" href="https://www.jetbrains.com/clion/" target="_blank" rel="noopener"
+>CLion&lt;/a>
+or &lt;a class="link" href="https://code.visualstudio.com/" target="_blank" rel="noopener"
+>Visual Studio Code&lt;/a>
+rather than standalone software. Since I am comfortable with the
+&lt;a class="link" href="https://www.jetbrains.com/" target="_blank" rel="noopener"
+>JetBrains suite of products&lt;/a>, being able to use
+CLion was perfect for me. The PlatformIO IDE also comes with tools for
+dependency management, unit testing via &lt;a class="link" href="https://github.com/google/googletest" target="_blank" rel="noopener"
+>GoogleTest&lt;/a>, and remote
+upload functionality.&lt;/p>
+&lt;h4 id="working-remotely">Working remotely
+&lt;/h4>&lt;p>Although not essential for microcontroller development itself, PlatformIO’s remote capabilities turned out to be
+particularly useful for this project. By using &lt;a class="link" href="https://docs.platformio.org/en/latest/core/index.html" target="_blank" rel="noopener"
+>PlatformIO Core&lt;/a>
+(their CLI tool), I was able to connect my ESP32-E to a host machine (an old 2012 iMac in my case) and start a remote
+agent like this:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">% pui remote agent start
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>With the agent running, I could upload builds, monitor output, and even run tests remotely from any other machine using
+the PlatformIO plugin. This setup was especially helpful since my main development machine is a MacBook Pro. It allowed
+me to work from anywhere without needing to have the microcontroller physically connected at all times. The main
+PlatformIO plugin doesn&amp;rsquo;t actually have options for remote development despite it being available in PlatformIO Core.
+Fortunately, the &lt;a class="link" href="https://plugins.jetbrains.com/plugin/20232-platformio-plus" target="_blank" rel="noopener"
+>Platformio Plus&lt;/a> plugin does.&lt;/p>
+&lt;p>&lt;img src="https://jbriggs.dev/p/esp32-flood-api/images/remoteDevelopmentPanel.png"
+width="366"
+height="380"
+srcset="https://jbriggs.dev/p/esp32-flood-api/images/remoteDevelopmentPanel_hu_36473489c2418fb2.png 480w, https://jbriggs.dev/p/esp32-flood-api/images/remoteDevelopmentPanel_hu_7c915e6f7b9be0bb.png 1024w"
+loading="lazy"
+alt="Remote development options via the Pio Plus Plugin"
+class="gallery-image"
+data-flex-grow="96"
+data-flex-basis="231px"
+>&lt;/p>
+&lt;h3 id="key-considerations">Key considerations
+&lt;/h3>&lt;p>The next step was to think about libraries I would need to use. I had four main considerations:&lt;/p>
+&lt;ol>
+&lt;li>How do I expose a web app?&lt;/li>
+&lt;li>How can I serialize an object into JSON?&lt;/li>
+&lt;li>How can I read an SQLite3 database?&lt;/li>
+&lt;li>How can I read a &lt;strong>22mb&lt;/strong> file on a microcontroller with only 4MB of flash memory?&lt;/li>
+&lt;/ol>
+&lt;p>&lt;a class="link" href="https://docs.platformio.org/en/latest/home/index.html" target="_blank" rel="noopener"
+>PlatformIO Home&lt;/a> is a local user interface provided by the
+PlatformIO plugin that helps configure projects. The user interface includes a library search
+feature, which I used to address my first two considerations.&lt;/p>
+&lt;p>For exposing HTTP endpoints (consideration #1), I quickly found a few Arduino libraries that provide web server
+functionality. For JSON serialization (consideration #2), I came across ArduinoJson, which is widely regarded as the
+standard library for handling JSON on microcontrollers.&lt;/p>
+&lt;p>Addressing considerations #3 and #4 required more effort. I knew I’d be reading my SQLite3 database from a MicroSD card,
+so I needed both a compatible &lt;a class="link" href="https://amzn.eu/d/8WP2FOO" target="_blank" rel="noopener"
+>MicroSD SPI module&lt;/a> and a library capable of reading SQLite
+databases directly from
+external storage. After some research, I
+found &lt;a class="link" href="https://github.com/siara-cc/esp32_arduino_sqlite3_lib" target="_blank" rel="noopener"
+>esp32_arduino_sqlite3_lib&lt;/a>,
+a library developed by &lt;strong>siara-cc&lt;/strong>. It supports
+reading SQLite3 databases via various methods,
+including MicroSD cards via &lt;a class="link" href="https://en.wikipedia.org/wiki/Serial_Peripheral_Interface" target="_blank" rel="noopener"
+>SPI&lt;/a>. This library met both of
+my final
+requirements. I did find that this library is not found within PlatformIOs library search. However, I could import it
+into my project via &lt;a class="link" href="https://git-scm.com/book/en/v2/Git-Tools-Submodules" target="_blank" rel="noopener"
+>git submodules&lt;/a>.&lt;/p>
+&lt;h3 id="other-useful-tools">Other useful tools
+&lt;/h3>&lt;p>Although it was not required for this project, I took the opportunity to build a couple of additional tools that proved
+helpful during development of the Flood API.&lt;/p>
+&lt;p>First, I wanted to experiment with my
+&lt;a class="link" href="https://thepihut.com/products/lcd1602-i2c-module?srsltid=AfmBOorLb8S0ax1tl3QRIeDpDyE0VDgfE2X7FBOmzy0fpz9NUIbVgin_" target="_blank" rel="noopener"
+>LCD1602&lt;/a>
+module. Getting feedback on the LCD in response to hitting various Flood API endpoints proved to be quite handy. This
+was
+especially useful for showcasing important runtime messages such as IP addresses without having to dig through logs.
+You&amp;rsquo;ll see it in various portions of my code with command like this:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// Display IP and PORT number
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">ostringstream&lt;/span> &lt;span class="n">portMessage&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">portMessage&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;Port: &amp;#34;&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">to_string&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">flood&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">config&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">PORT&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">display&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">displayText&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">WiFi&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">localIP&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="n">toString&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="n">portMessage&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="n">common&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">display&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">STICKY&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>I also created a cross-platform logger library. Usually, logging on a microcontroller looks like this:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">Serial&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">println&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;My log!&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>But since I wanted to run tests natively on my MacBook, I knew this default logging approach wouldn&amp;rsquo;t work outside
+of the microcontroller environment. So I built a logger that chooses the appropriate logging approach, including log
+levels depending on the target platform:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug_f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;My log: %d&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="mi">125&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>With the &lt;code>LOG&lt;/code> macro defined like so:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="cp">#if defined(ARDUINO) || defined(ESP32)
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">#include&lt;/span> &lt;span class="cpf">&amp;#34;LoggerSerial.h&amp;#34;&lt;/span>&lt;span class="cp">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">&lt;/span>&lt;span class="c1">// Uses Serial.printLn() for logging
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="cp">#define LOG jbriggs::common::logger::LoggerSerial::getInstance()
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">#else
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">#include&lt;/span> &lt;span class="cpf">&amp;#34;Logger.h&amp;#34;&lt;/span>&lt;span class="cp">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">&lt;/span>&lt;span class="c1">// Uses cout for logging
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="cp">#define LOG jbriggs::common::logger::Logger::getInstance()
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="cp">#endif
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Whilst these tools weren&amp;rsquo;t part of the core Flood API functionality, they were valuable during development and may be
+moved
+into a common library for reuse in future projects. I won&amp;rsquo;t be covering them in further detail here though.&lt;/p>
+&lt;h2 id="implementation">Implementation
+&lt;/h2>&lt;p>Now that I had my development environment setup, it was time to start the implementation of the Flood API. Within this
+section, I&amp;rsquo;ll go through the various steps I took to implement the Flood API. This will include setting up the
+device and its connections, connecting to the SQLite3 database, and creating a response which will be returned to the
+client.&lt;/p>
+&lt;h3 id="initial-setup">Initial setup
+&lt;/h3>&lt;p>Before touching any code, I needed to setup my ESP32-E microcontroller by connecting the
+&lt;a class="link" href="https://amzn.eu/d/7oocRs7" target="_blank" rel="noopener"
+>MicroSD SPI module&lt;/a> to the
+correct pins. The pinout for the ESP32-E is can be found on the
+&lt;a class="link" href="https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654#6.%20Pinout" target="_blank" rel="noopener"
+>DFRobot website&lt;/a>. The MicroSD SPI
+module I have contains six pins which all need to be connected to the ESP32-E.&lt;/p>
+&lt;p>&lt;img src="https://jbriggs.dev/p/esp32-flood-api/images/IMG_2623.jpeg"
+width="4032"
+height="3024"
+srcset="https://jbriggs.dev/p/esp32-flood-api/images/IMG_2623_hu_b21170c431df28be.jpeg 480w, https://jbriggs.dev/p/esp32-flood-api/images/IMG_2623_hu_fbc07d57155314f0.jpeg 1024w"
+loading="lazy"
+alt="MicroSD SPI Module"
+class="gallery-image"
+data-flex-grow="133"
+data-flex-basis="320px"
+>&lt;/p>
+&lt;p>All but one of the pins have a specific pin they should be connected to on the ESP32-E.&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>MicroSD Module Pin Name&lt;/th>
+&lt;th>Description&lt;/th>
+&lt;th>Connecting ESP32 Pin&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>CS&lt;/td>
+&lt;td>Chip Select&lt;/td>
+&lt;td>Pin 4 (Used as input or output)&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>SCK&lt;/td>
+&lt;td>Serial Clock&lt;/td>
+&lt;td>Standard SPI SCK pin&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>MOSI&lt;/td>
+&lt;td>Master Out, Slave In&lt;/td>
+&lt;td>Standard SPI MOSI pin&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>MISO&lt;/td>
+&lt;td>Master In, Slave Out&lt;/td>
+&lt;td>Standard SPI MISO pin&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>VCC&lt;/td>
+&lt;td>5V Power&lt;/td>
+&lt;td>Standard VCC pin&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>GND&lt;/td>
+&lt;td>Ground&lt;/td>
+&lt;td>Standard GRN pin&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>&lt;img src="https://jbriggs.dev/p/esp32-flood-api/images/IMG_2622.jpeg"
+width="4032"
+height="3024"
+srcset="https://jbriggs.dev/p/esp32-flood-api/images/IMG_2622_hu_afd8e3eaf59965cd.jpeg 480w, https://jbriggs.dev/p/esp32-flood-api/images/IMG_2622_hu_2b98c0e79f363221.jpeg 1024w"
+loading="lazy"
+alt="MicroSD SPI Module connected to the Firebeetle 2 ESP32-E"
+class="gallery-image"
+data-flex-grow="133"
+data-flex-basis="320px"
+>&lt;/p>
+&lt;h3 id="connecting-to-my-local-network">Connecting to my local network
+&lt;/h3>&lt;p>Since the device needs to be accessible from within my home network, I needed to setup my WiFi connection. I used the
+&lt;a class="link" href="https://docs.arduino.cc/language-reference/en/functions/wifi/client/" target="_blank" rel="noopener"
+>Arduino WifiClient&lt;/a> library to do this. This
+library provides a simple way to setup WiFi credentials, and then automatically connect to the network:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">WiFiClass&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">mode&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">WIFI_STA&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">WiFi&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">begin&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">flood&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">config&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">WIFI_SSID&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">flood&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">config&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">WIFI_PASSWORD&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">while&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">WiFiClass&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">status&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">WL_CONNECTED&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">delay&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">500&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">display&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">displayText&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Connecting..&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">common&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">display&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">FLASH&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug_f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Connected to WiFi: %s&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">WiFi&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">localIP&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="n">toString&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>I also displayed the IP address of the ESP32-E on the LCD, and the port number of the API:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// Display IP and PORT number
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">ostringstream&lt;/span> &lt;span class="n">portMessage&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">portMessage&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;Port: &amp;#34;&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">to_string&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">flood&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">config&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">PORT&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">display&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">displayText&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">WiFi&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">localIP&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="n">toString&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="n">portMessage&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">str&lt;/span>&lt;span class="p">(),&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">common&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">display&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">STICKY&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h3 id="connecting-to-sqlite3">Connecting to SQLite3
+&lt;/h3>&lt;p>As &lt;a class="link" href="#key-considerations" >previously mentioned&lt;/a>, I found a crucial SQLite3 library specifically for ESP32
+microcontrollers which supports accessing SQLite3 database files via SD cards. A lot of my implementation here
+follows a good example which the library provides. Before actually reading the data from the
+database file, some setup is required.&lt;/p>
+&lt;p>To begin, I needed to initialize the SPI bus, and SD library. I also make sure that the SD card is readable:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;span class="lnt">19
+&lt;/span>&lt;span class="lnt">20
+&lt;/span>&lt;span class="lnt">21
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">FloodRepository&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">init&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Step 1: Initialize SPI and SD
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Initializing FloodRepository&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Beginning SPI&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">SPI&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">begin&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Beginning SD &amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">while&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">SD&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">begin&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">config&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">MICRO_SD_CS_PIN&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Card Mount Failed&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">uint8_t&lt;/span> &lt;span class="n">cardType&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">SD&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">cardType&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">cardType&lt;/span> &lt;span class="o">==&lt;/span> &lt;span class="n">CARD_NONE&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;No SD card attached&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">runtime_error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;No SD card attached&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Next, I just make sure that the file I am going to be reading the flood data from is actually readable:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// --- Continued: Still inside FloodRepository::init() ---
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Step 2: Check the database file exists
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">SD&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">exists&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">m_dbPath&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug_f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Database file &amp;#39;%s&amp;#39; exists on SD card&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">this&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">m_dbPath&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">File&lt;/span> &lt;span class="n">file&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">SD&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">open&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">m_dbPath&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug_f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;File size: %d&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">file&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">size&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">file&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">close&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">else&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Database file not found on SD card&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Now that I know the SD card is mounted, and the database file is read, it&amp;rsquo;s time to initialize the SQLite3 library:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// --- Continued: Still inside FloodRepository::init() ---
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Step 3: Initialize SQLite3
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Initializing SQLite3...&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="kt">int&lt;/span> &lt;span class="n">initialize&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">sqlite3_initialize&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">initialize&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">SQLITE_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">error_f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Failed to initialize SQLite3: %s&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">initialize&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">runtime_error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Failed to initialize SQLite3&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Once the library has been initialized, I open the database file:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// --- Continued: Still inside FloodRepository::init() ---
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Step 4: Open database file
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Opening DB...&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">stringstream&lt;/span> &lt;span class="n">vfsPath&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">vfsPath&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;/sd&amp;#34;&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="k">this&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">m_dbPath&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">openDb&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">vfsPath&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="o">&amp;amp;&lt;/span>&lt;span class="n">m_floodDb&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">!=&lt;/span> &lt;span class="n">SQLITE_OK&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Failed to open database&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">runtime_error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Failed to open database&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">info_f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Connected to database!&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Once that is done, the database is actually in a usable state. there is one more thing I do during setup however to
+better optimize my future calls to the database, and that is cache all station names found within the database to avoid
+doing additional calls:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// --- Continued: Still inside FloodRepository::init() ---
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Step 5: Cache station names
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Caching station names&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">auto&lt;/span> &lt;span class="n">stationNames&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">this&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">getAllStations&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="n">stationNames&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">empty&lt;/span>&lt;span class="p">())&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Failed to get station names&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">runtime_error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Failed to get station names&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Completed initialization for FloodRepository&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h3 id="mapping-to-something-useful">Mapping to something useful
+&lt;/h3>&lt;p>Since my API needs to return JSON, I decided to create an intermediary service to map the objects returned
+by my repository layer into JSON. Using &lt;a class="link" href="https://arduinojson.org/" target="_blank" rel="noopener"
+>ArduinoJson&lt;/a> made this process painless and
+straightforward:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">JsonDocument&lt;/span> &lt;span class="n">doc&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="k">for&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span>&lt;span class="o">&amp;amp;&lt;/span> &lt;span class="nl">rainfallReading&lt;/span> &lt;span class="p">:&lt;/span> &lt;span class="n">rainfallReadings&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">JsonDocument&lt;/span> &lt;span class="n">reading&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">reading&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s">&amp;#34;timestamp&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">rainfallReading&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">timestamp&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">reading&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s">&amp;#34;level&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">rainfallReading&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">level&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">reading&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s">&amp;#34;station&amp;#34;&lt;/span>&lt;span class="p">]&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">rainfallReading&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">station&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">doc&lt;/span>&lt;span class="p">[&lt;/span>&lt;span class="s">&amp;#34;readings&amp;#34;&lt;/span>&lt;span class="p">].&lt;/span>&lt;span class="n">add&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">reading&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Failed to add reading&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">throw&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">runtime_error&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Failed to add reading&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>To convert this &lt;code>JsonDocument&lt;/code> into an easy-to-read JSON output, ArduinoJson provides a handy function:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">serializeJsonPretty&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">doc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">json&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h3 id="flood-routes">Flood routes
+&lt;/h3>&lt;h4 id="setting-up-webserver">Setting up WebServer
+&lt;/h4>&lt;p>Within the Arduino core libraries for ESP32 is the
+&lt;a class="link" href="https://github.com/espressif/arduino-esp32/blob/master/libraries/WebServer/src/WebServer.h" target="_blank" rel="noopener"
+>WebServer&lt;/a> class. This
+class is a &amp;ldquo;dead simple web-server&amp;rdquo; that supports &lt;code>GET&lt;/code> and &lt;code>POST&lt;/code> HTTP methods; although limited, it is
+perfect and lightweight for my use case of having a read-only API.&lt;/p>
+&lt;p>The setup for this web server is basic; all you need is to register a handler to a URI:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">FloodRoutes&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">FloodRoutes&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">common&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">display&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">IDisplay&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">display&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">db&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">IFloodRepository&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">flood_repository&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">mapper&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">IFloodMapper&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">flood_mapper&lt;/span>&lt;span class="p">)&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="n">m_server&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">config&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">PORT&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">m_display&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">display&lt;/span>&lt;span class="p">),&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">m_floodRepository&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">flood_repository&lt;/span>&lt;span class="p">),&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">m_floodMapper&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">flood_mapper&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Setup routes
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Setting up routes...&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// GET: /river
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">on&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;/river&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">HTTP_GET&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">[&lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Handles the response
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">this&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">river&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">});&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>For handling a URI with a path parameter, &lt;code>UriBraces&lt;/code> becomes useful as a matcher, and then the path parameter
+can be extracted via the &lt;code>WebServer&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// --- Continued: Still inside FloodRoutes::FloodRoutes() ---
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// GET: /rainfall/{stationName}
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">on&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">UriBraces&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;/rainfall/{}&amp;#34;&lt;/span>&lt;span class="p">),&lt;/span> &lt;span class="n">HTTP_GET&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">[&lt;/span>&lt;span class="k">this&lt;/span>&lt;span class="p">]&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">pathArg&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">pathArg&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">0&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">const&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span> &lt;span class="n">stationName&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">pathArg&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="n">pathArg&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">length&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Handles the response
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">this&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">rainfallStation&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">stationName&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">});&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Finally, with WebServer setup, the server can be started:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// --- Continued: Still inside FloodRoutes::FloodRoutes() ---
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Begin server
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Starting server in FloodRoutes&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">begin&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h4 id="returning-content-on-webserver">Returning content on WebServer
+&lt;/h4>&lt;p>With &lt;code>WebServer&lt;/code> now initialized, I needed to send a response to the client. As you may have seen in the
+&lt;a class="link" href="#setting-up-webserver" >Setting up WebServer&lt;/a>, as part of handling a URI, I called a function for both &lt;code>/river&lt;/code> and
+&lt;code>/rainfall/{stationName}&lt;/code> which handles the response. Both functions are similar in functionality due to how much
+logic is delegated to the &lt;a class="link" href="#connecting-to-sqlite3" >repository layer&lt;/a> and &lt;a class="link" href="#mapping-to-something-useful" >mappers&lt;/a>.&lt;/p>
+&lt;p>The first step is to get any request parameters passed as part of the request. I created a handy function
+which returns the value of a request parameter to help facilitate this. The &lt;code>getQueryParameter&lt;/code>
+function checks if a request param exists, and extracts it if it does. If the request
+param does not exist, then return a default value:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;span class="lnt">19
+&lt;/span>&lt;span class="lnt">20
+&lt;/span>&lt;span class="lnt">21
+&lt;/span>&lt;span class="lnt">22
+&lt;/span>&lt;span class="lnt">23
+&lt;/span>&lt;span class="lnt">24
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span> &lt;span class="n">FloodRoutes&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">getQueryParameter&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span>&lt;span class="o">&amp;amp;&lt;/span> &lt;span class="n">param&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span>&lt;span class="o">&amp;amp;&lt;/span> &lt;span class="n">defaultValue&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Build string for LCD
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">stringstream&lt;/span> &lt;span class="n">paramDisplay&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">paramDisplay&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;Param &amp;#34;&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">param&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Check if request param is found on request
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="n">String&lt;/span> &lt;span class="nf">paramName&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">param&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">hasArg&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">paramName&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">debug_f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Param %s not found&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">param&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">displayParamOnLCD&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">paramDisplay&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="n">defaultValue&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">empty&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">?&lt;/span> &lt;span class="s">&amp;#34;EMPTY&amp;#34;&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="n">defaultValue&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Return the default value if request param does not exist
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">return&lt;/span> &lt;span class="n">defaultValue&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">empty&lt;/span>&lt;span class="p">()&lt;/span> &lt;span class="o">?&lt;/span> &lt;span class="s">&amp;#34;&amp;#34;&lt;/span> &lt;span class="o">:&lt;/span> &lt;span class="n">defaultValue&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Extract request param value
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="k">auto&lt;/span> &lt;span class="n">paramValue&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">arg&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">paramName&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span> &lt;span class="n">result&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">paramValue&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="n">paramValue&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">length&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">displayParamOnLCD&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">paramDisplay&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="n">result&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="n">result&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>With &lt;code>getQueryParameter()&lt;/code>, I could get the request parameters at the start of a request:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">FloodRoutes&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">river&lt;/span>&lt;span class="p">()&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">info&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;/river requested&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">m_display&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">displayText&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Calling&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;/river&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">common&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">display&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">FLASH&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Get request parameters
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// Get the date parameter
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span> &lt;span class="n">date&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">getQueryParameter&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;start&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Get limit parameter with default value, and convert to int
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">limit&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">stoi&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">getQueryParameter&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;page&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;1&amp;#34;&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Get page parameter with default value, and convert to int
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">pagesize&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">stoi&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">getQueryParameter&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;pagesize&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;12&amp;#34;&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Next, data needs to be fetched from the flood repository:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// --- Continued: Still inside FloodRoutes::river() ---
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">const&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">vector&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">db&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">RiverReading&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">readings&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">=&lt;/span> &lt;span class="n">m_floodRepository&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">getRiverReadings&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">date&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">limit&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">pagesize&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Finally, using my mapper, I could turn this data into JSON and return a response using &lt;code>WebServer&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">// --- Continued: Still inside FloodRoutes::river() ---
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Convert to JSON
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="n">JsonDocument&lt;/span> &lt;span class="n">doc&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">m_floodMapper&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">getFloodData&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">readings&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">serializeJsonPretty&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">doc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">const&lt;/span> &lt;span class="kt">char&lt;/span>&lt;span class="o">*&lt;/span> &lt;span class="n">result&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">send&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">200&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;application/json&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">result&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The function for getting rainfalls for a station is very similar, only it has the addition of the path parameter
+from the URI &lt;code>/rainfall/{stationName}&lt;/code>, and a quick check to ensure that the station passed exists:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;span class="lnt">19
+&lt;/span>&lt;span class="lnt">20
+&lt;/span>&lt;span class="lnt">21
+&lt;/span>&lt;span class="lnt">22
+&lt;/span>&lt;span class="lnt">23
+&lt;/span>&lt;span class="lnt">24
+&lt;/span>&lt;span class="lnt">25
+&lt;/span>&lt;span class="lnt">26
+&lt;/span>&lt;span class="lnt">27
+&lt;/span>&lt;span class="lnt">28
+&lt;/span>&lt;span class="lnt">29
+&lt;/span>&lt;span class="lnt">30
+&lt;/span>&lt;span class="lnt">31
+&lt;/span>&lt;span class="lnt">32
+&lt;/span>&lt;span class="lnt">33
+&lt;/span>&lt;span class="lnt">34
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-c++" data-lang="c++">&lt;span class="line">&lt;span class="cl">&lt;span class="kt">void&lt;/span> &lt;span class="n">FloodRoutes&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">rainfallStation&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="k">const&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span>&lt;span class="o">&amp;amp;&lt;/span> &lt;span class="n">stationName&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Get path param station name
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">stringstream&lt;/span> &lt;span class="n">fullPath&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">fullPath&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="s">&amp;#34;/rainfall/&amp;#34;&lt;/span> &lt;span class="o">&amp;lt;&amp;lt;&lt;/span> &lt;span class="n">stationName&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">LOG&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">info_f&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;/rainfall/{station} requested using %s&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">stationName&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">m_display&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">displayText&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;Calling&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">fullPath&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">str&lt;/span>&lt;span class="p">(),&lt;/span> &lt;span class="n">common&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">display&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">FLASH&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// You can validate against your known stations
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">if&lt;/span> &lt;span class="p">(&lt;/span>&lt;span class="o">!&lt;/span>&lt;span class="n">m_floodRepository&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">stationExists&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">stationName&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">send&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">404&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;application/json&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">R&lt;/span>&lt;span class="s">&amp;#34;({&amp;#34;&lt;/span>&lt;span class="n">error&lt;/span>&lt;span class="s">&amp;#34;: &amp;#34;&lt;/span>&lt;span class="n">Invalid&lt;/span> &lt;span class="n">station&lt;/span> &lt;span class="n">name&lt;/span>&lt;span class="p">.&lt;/span> &lt;span class="n">Station&lt;/span> &lt;span class="n">not&lt;/span> &lt;span class="n">found&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="s">&amp;#34;})&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Get request parameters
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="c1">// Get the date parameter
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span> &lt;span class="n">date&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">getQueryParameter&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;start&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;2022-12-25&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Get limit parameter with default value
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">limit&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">stoi&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">getQueryParameter&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;page&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;1&amp;#34;&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Get page parameter with default value
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="kt">int&lt;/span> &lt;span class="n">pagesize&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">stoi&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">getQueryParameter&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s">&amp;#34;pagesize&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;12&amp;#34;&lt;/span>&lt;span class="p">));&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">const&lt;/span> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">vector&lt;/span>&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="n">db&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">RainfallReading&lt;/span>&lt;span class="o">&amp;gt;&lt;/span> &lt;span class="n">rainfall_readings&lt;/span> &lt;span class="o">=&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">m_floodRepository&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">getStationRainfallReadings&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">stationName&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">date&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">limit&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">pagesize&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="c1">// Convert to JSON
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">&lt;/span> &lt;span class="k">const&lt;/span> &lt;span class="n">JsonDocument&lt;/span> &lt;span class="n">doc&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">m_floodMapper&lt;/span>&lt;span class="o">-&amp;gt;&lt;/span>&lt;span class="n">getRainfallReadings&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">rainfall_readings&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">std&lt;/span>&lt;span class="o">::&lt;/span>&lt;span class="n">string&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="p">;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="n">serializeJsonPretty&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">doc&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="k">return&lt;/span> &lt;span class="n">m_server&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">send&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="mi">200&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s">&amp;#34;application/json&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="n">c_str&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h2 id="what-setbacks-did-i-have">What setbacks did I have
+&lt;/h2>&lt;p>As this was my first embedded project, the implementation wasn&amp;rsquo;t entirely straightforward. A couple of
+things set myself back and made me reconsider approaches at times. Whilst these issues didn&amp;rsquo;t stop the
+project from completing, it definitely would shape how I design future projects on the ESP32 series of
+microcontrollers.&lt;/p>
+&lt;h3 id="partition-tables">Partition tables
+&lt;/h3>&lt;p>The next issue I had with the Flood API was storage. My Firebeetle 2 ESP32-E only contains 4MB of flash memory.
+This does not mean I have 4MB to play with.&lt;/p>
+&lt;p>This default partition table ends allowing slightly more than 1MB of storage for your main app. Turns out for
+the Flood API and the number of dependencies I was using, I needed slightly more than the default:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">RAM: &lt;span class="o">[==&lt;/span> &lt;span class="o">]&lt;/span> 17.5% &lt;span class="o">(&lt;/span>used &lt;span class="m">57412&lt;/span> bytes from &lt;span class="m">327680&lt;/span> bytes&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">Flash: &lt;span class="o">[==========]&lt;/span> 115.2% &lt;span class="o">(&lt;/span>used &lt;span class="m">1509853&lt;/span> bytes from &lt;span class="m">1310720&lt;/span> bytes&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">Error: The program size &lt;span class="o">(&lt;/span>&lt;span class="m">1509853&lt;/span> bytes&lt;span class="o">)&lt;/span> is greater than maximum allowed &lt;span class="o">(&lt;/span>&lt;span class="m">1310720&lt;/span> bytes&lt;span class="o">)&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>To fix this, you can define your own partition table if you know what you&amp;rsquo;re doing, however there are quite a
+few default partition tables you can select from which probably fit all possible needs.:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;span class="lnt">19
+&lt;/span>&lt;span class="lnt">20
+&lt;/span>&lt;span class="lnt">21
+&lt;/span>&lt;span class="lnt">22
+&lt;/span>&lt;span class="lnt">23
+&lt;/span>&lt;span class="lnt">24
+&lt;/span>&lt;span class="lnt">25
+&lt;/span>&lt;span class="lnt">26
+&lt;/span>&lt;span class="lnt">27
+&lt;/span>&lt;span class="lnt">28
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">jamie.briggs@G0GG60253H LearnByDoing % ls -l &lt;span class="nv">$HOME&lt;/span>/.platformio/packages/framework-arduinoespressif32/tools/partitions
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">total &lt;span class="m">216&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">377&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> app3M_fat9M_16MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">447&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> app3M_fat9M_fact512k_16MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">374&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> app3M_spiffs9M_fact512k_16MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">125&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> bare_minimum_2MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">8192&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> boot_app0.bin
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">304&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> default_16MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">304&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> default_8MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">305&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> default_ffat_8MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">304&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> default_ffat.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">3072&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> default.bin
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">304&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> default.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">378&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> ffat.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">259&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> huge_app.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">307&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> large_fat_32MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">305&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> large_ffat_8MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">307&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> large_littlefs_32MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">304&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> large_spiffs_16MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">305&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> large_spiffs_8MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">216&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> max_app_8MB.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">303&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> min_spiffs.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">265&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> minimal.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">260&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> no_ota.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">260&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> noota_3g.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">334&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> noota_3gffat.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">334&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> noota_ffat.csv
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">-rw-r--r--@ &lt;span class="m">1&lt;/span> jamie.briggs staff &lt;span class="m">320&lt;/span> &lt;span class="m">6&lt;/span> Jun &lt;span class="m">2024&lt;/span> rainmaker.csv
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The default partition table is split into six partitions:&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Partition Name&lt;/th>
+&lt;th>Type&lt;/th>
+&lt;th>Size&lt;/th>
+&lt;th>Purpose&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>&lt;code>nvs&lt;/code>&lt;/td>
+&lt;td>data&lt;/td>
+&lt;td>20KB&lt;/td>
+&lt;td>Non-volatile storage. Usually holds Wi-Fi credentials, or user settings.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>otadata&lt;/code>&lt;/td>
+&lt;td>data&lt;/td>
+&lt;td>8KB&lt;/td>
+&lt;td>Stores over-the-air update metadata.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>app0&lt;/code>&lt;/td>
+&lt;td>app&lt;/td>
+&lt;td>1.25MB&lt;/td>
+&lt;td>First firmware slot. Contains the application the user has created (Flood API).&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>app1&lt;/code>&lt;/td>
+&lt;td>app&lt;/td>
+&lt;td>1.25MB&lt;/td>
+&lt;td>Second firmware slot. Used when updating.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>spiffs&lt;/code>&lt;/td>
+&lt;td>Data&lt;/td>
+&lt;td>1.375MB&lt;/td>
+&lt;td>File system storage, used for storing assets like logs or data.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>coredump&lt;/code>&lt;/td>
+&lt;td>Data&lt;/td>
+&lt;td>64KB&lt;/td>
+&lt;td>Reserved for crash dump data.&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>The key thing here is that there is support for over-the-air updates. Whilst useful, for this project it&amp;rsquo;s
+unnecessary and I could take that storage for my own use. I also didn&amp;rsquo;t need all the space on &lt;code>spiffs&lt;/code> partition
+as my SQLite3 database would be stored on a MicroSD card anyway. I went for &lt;code>huge_app.csv&lt;/code> as it fit all of my needs:&lt;/p>
+&lt;table>
+&lt;thead>
+&lt;tr>
+&lt;th>Partition Name&lt;/th>
+&lt;th>Type&lt;/th>
+&lt;th>Size&lt;/th>
+&lt;th>Purpose&lt;/th>
+&lt;/tr>
+&lt;/thead>
+&lt;tbody>
+&lt;tr>
+&lt;td>&lt;code>nvs&lt;/code>&lt;/td>
+&lt;td>data&lt;/td>
+&lt;td>20KB&lt;/td>
+&lt;td>Non-volatile storage. Usually holds Wi-Fi credentials, or user settings.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>otadata&lt;/code>&lt;/td>
+&lt;td>data&lt;/td>
+&lt;td>8KB&lt;/td>
+&lt;td>Stores over-the-air update metadata. Not used due to lack of second app partition.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>app0&lt;/code>&lt;/td>
+&lt;td>app&lt;/td>
+&lt;td>3MB&lt;/td>
+&lt;td>The only firmware slot. Contains the application the user has created (Flood API).&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>spiffs&lt;/code>&lt;/td>
+&lt;td>Data&lt;/td>
+&lt;td>896KB&lt;/td>
+&lt;td>File system storage, used for storing assets like logs or data.&lt;/td>
+&lt;/tr>
+&lt;tr>
+&lt;td>&lt;code>coredump&lt;/code>&lt;/td>
+&lt;td>Data&lt;/td>
+&lt;td>64KB&lt;/td>
+&lt;td>Reserved for crash dump data.&lt;/td>
+&lt;/tr>
+&lt;/tbody>
+&lt;/table>
+&lt;p>This partition table was then added to my &lt;code>.platformio&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-yaml" data-lang="yaml">&lt;span class="line">&lt;span class="cl">&lt;span class="p">[&lt;/span>&lt;span class="w"> &lt;/span>&lt;span class="l">env:firebeetle2_esp32e ]&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="l">platform = espressif32&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="l">board = dfrobot_firebeetle2_esp32e&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="l">framework = arduino&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="l">test_framework = googletest&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="l">monitor_speed = 115200&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="w"> &lt;/span>&lt;span class="l">board_build.partitions = huge_app.csv&lt;/span>&lt;span class="w">
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>If I needed even more space for the application, I could have created a custom partition table file and removed
+&lt;code>otadata&lt;/code> and
+&lt;code>spiffs&lt;/code> entirely. However, the defaults provided in &lt;code>huge_app.csv&lt;/code> were more than sufficient for the projects needs.&lt;/p>
+&lt;p>This then allows the Flood API to fit on the ESP32-E with plenty of room. Although this meant that I couldn&amp;rsquo;t update
+the app remotely in a deployed setting, for this project it wasn&amp;rsquo;t in scope. This does, however, highlight a crucial
+drawback to this specific microcontroller when it comes to memory.&lt;/p>
+&lt;h3 id="sqlite3-compatibility-issues">SQLite3 compatibility issues
+&lt;/h3>&lt;p>When I first set up the &lt;a class="link" href="#connecting-to-sqlite3" >repository layer&lt;/a>, I ran into an issue with
+reading the SQLite3 database file. Initially, I suspected it was my own error, but testing with an example
+database from the &lt;a class="link" href="https://github.com/siara-cc/esp32_arduino_sqlite3_lib" target="_blank" rel="noopener"
+>SQLite3 library&lt;/a> showed that the issue
+was specific to the flood database file I was using.&lt;/p>
+&lt;p>I knew the file itself was fine - others working on the same challenge were using it without issues - so my next
+suspicion was a compatibility problem with the library. Checking the database version confirmed the file was built with
+SQLite &lt;code>3.43.2&lt;/code>:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">% file flood.db
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">flood.db: SQLite 3.x database, last written using SQLite version 3043002, writer version 2, &lt;span class="nb">read&lt;/span> version 2, unused bytes 12, file counter 2378, database pages 6170, cookie 0x18, schema 4, UTF-8, version-valid-for &lt;span class="m">2378&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The library I used was also based on this version, so I expected it to work. However my application logs showed that
+this
+was not the case:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Beginning SPI
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Beginning SD
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Database file &lt;span class="s1">&amp;#39;/flood.db&amp;#39;&lt;/span> exists on SD card
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> File size: &lt;span class="m">25272320&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>INFO&lt;span class="o">]&lt;/span> Initializing SQLite3...
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Opening DB...
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>INFO&lt;span class="o">]&lt;/span> Opened database successfully: /sd/flood.db
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>INFO&lt;span class="o">]&lt;/span> Connected to database!
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Caching station names
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Preparing query: SELECT * FROM StationNames
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>ERROR&lt;span class="o">]&lt;/span> Failed to prepare statement: file is not a database
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Locally, &lt;code>flood.db&lt;/code> opened without issue. So I decided to recreate it myself. First, I dumped the database:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">% sqlite3 flood.db .dump &amp;gt; flood_dump.sql
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>I then downloaded &lt;a class="link" href="https://github.com/sqlite/sqlite/releases/tag/version-3.43.2" target="_blank" rel="noopener"
+>SQLite 3.43.2&lt;/a>,
+and built it from source:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">% &lt;span class="nb">cd&lt;/span> sqlite-version-3.43.2/
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">sqlite-version-3.43.2 % ./configure
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">sqlite-version-3.43.2 % make
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Finally, I created a new database from the dump:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">sqlite3 flood_recreated.db &amp;lt; flood_dump.sql
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>Using this newly created version of the flood database resolved the problem:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>INFO&lt;span class="o">]&lt;/span> Initializing SQLite3...
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Opening DB...
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>INFO&lt;span class="o">]&lt;/span> Opened database successfully: /sd/flood_recreated.db
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>INFO&lt;span class="o">]&lt;/span> Connected to database!
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Caching station names
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Preparing query: SELECT * FROM StationNames
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Stepping through statement
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>DEBUG&lt;span class="o">]&lt;/span> Finalizing. Found &lt;span class="m">11&lt;/span> results.
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">[&lt;/span>INFO&lt;span class="o">]&lt;/span> Completed initialization &lt;span class="k">for&lt;/span> FloodRepository
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>I&amp;rsquo;m still not so sure as to why the original file failed with this library, but recreating it allowed me to move
+forward.&lt;/p>
+&lt;p>Whilst I did manage to get this working in the end, I did spend a large amount of time exploring other
+database options. This was mainly due to both space constraints, which I explained in
+the &lt;a class="link" href="#partition-tables" >Partition tables&lt;/a> section.
+At the time, I did not think I could modify partition tables, so I instead tried to find something more lightweight.&lt;/p>
+&lt;p>Whilst debugging the storage issues I was having, I briefly explored connecting to an external MySQL database. The idea
+was
+that offloading the search functionality to an external server would mean that the library I&amp;rsquo;d use for connecting to the
+database
+would be more lightweight. I did manage to get this working, however, it still didn&amp;rsquo;t fix the underlying storage
+limitations. In
+retrospect, if I had fixed the partition tables before trying this, it would&amp;rsquo;ve worked completely fine as my tests
+confirmed.
+Although this idea was scrapped, it&amp;rsquo;s handy to know it&amp;rsquo;s possible to use an external MySQL database in a REST API
+on a microcontroller.&lt;/p>
+&lt;h2 id="the-final-implementation">The final implementation
+&lt;/h2>&lt;p>After a lot of work, the final Flood API was complete. With the ESP32-E started, I could connect to the API which
+I had implemented.&lt;/p>
+&lt;p>&lt;img src="https://jbriggs.dev/p/esp32-flood-api/images/IMG_2613.gif"
+width="500"
+height="282"
+srcset="https://jbriggs.dev/p/esp32-flood-api/images/IMG_2613_hu_3cbe14bb8e07b0f8.gif 480w, https://jbriggs.dev/p/esp32-flood-api/images/IMG_2613_hu_5bf10cb769c62895.gif 1024w"
+loading="lazy"
+alt="Calling the endpoint /river endpoint with three request parameters"
+class="gallery-image"
+data-flex-grow="177"
+data-flex-basis="425px"
+>&lt;/p>
+&lt;p>With my ESP32-E powered on, I could make a request to the &lt;code>/river&lt;/code> endpoint with three parameters:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;span class="lnt">19
+&lt;/span>&lt;span class="lnt">20
+&lt;/span>&lt;span class="lnt">21
+&lt;/span>&lt;span class="lnt">22
+&lt;/span>&lt;span class="lnt">23
+&lt;/span>&lt;span class="lnt">24
+&lt;/span>&lt;span class="lnt">25
+&lt;/span>&lt;span class="lnt">26
+&lt;/span>&lt;span class="lnt">27
+&lt;/span>&lt;span class="lnt">28
+&lt;/span>&lt;span class="lnt">29
+&lt;/span>&lt;span class="lnt">30
+&lt;/span>&lt;span class="lnt">31
+&lt;/span>&lt;span class="lnt">32
+&lt;/span>&lt;span class="lnt">33
+&lt;/span>&lt;span class="lnt">34
+&lt;/span>&lt;span class="lnt">35
+&lt;/span>&lt;span class="lnt">36
+&lt;/span>&lt;span class="lnt">37
+&lt;/span>&lt;span class="lnt">38
+&lt;/span>&lt;span class="lnt">39
+&lt;/span>&lt;span class="lnt">40
+&lt;/span>&lt;span class="lnt">41
+&lt;/span>&lt;span class="lnt">42
+&lt;/span>&lt;span class="lnt">43
+&lt;/span>&lt;span class="lnt">44
+&lt;/span>&lt;span class="lnt">45
+&lt;/span>&lt;span class="lnt">46
+&lt;/span>&lt;span class="lnt">47
+&lt;/span>&lt;span class="lnt">48
+&lt;/span>&lt;span class="lnt">49
+&lt;/span>&lt;span class="lnt">50
+&lt;/span>&lt;span class="lnt">51
+&lt;/span>&lt;span class="lnt">52
+&lt;/span>&lt;span class="lnt">53
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">% curl -X GET &lt;span class="s2">&amp;#34;http://192.168.1.249:80/river?start=2022-12-25&amp;amp;page=1&amp;amp;pagesize=12&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;readings&amp;#34;&lt;/span>: &lt;span class="o">[&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T00:00:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.864
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T00:15:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.859
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T00:30:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.857
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T00:45:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.854
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T01:00:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.853
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T01:15:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.85
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T01:30:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.85
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T01:45:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.85
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T02:00:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.85
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T02:15:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.85
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T02:30:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.85
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2022-12-25T02:45:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.853
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">]&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>And I could make a request to the &lt;code>/rainfall/{stationName}&lt;/code> endpoint with a parth variable, and two request parameters:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;span class="lnt">19
+&lt;/span>&lt;span class="lnt">20
+&lt;/span>&lt;span class="lnt">21
+&lt;/span>&lt;span class="lnt">22
+&lt;/span>&lt;span class="lnt">23
+&lt;/span>&lt;span class="lnt">24
+&lt;/span>&lt;span class="lnt">25
+&lt;/span>&lt;span class="lnt">26
+&lt;/span>&lt;span class="lnt">27
+&lt;/span>&lt;span class="lnt">28
+&lt;/span>&lt;span class="lnt">29
+&lt;/span>&lt;span class="lnt">30
+&lt;/span>&lt;span class="lnt">31
+&lt;/span>&lt;span class="lnt">32
+&lt;/span>&lt;span class="lnt">33
+&lt;/span>&lt;span class="lnt">34
+&lt;/span>&lt;span class="lnt">35
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">% curl -X GET &lt;span class="s2">&amp;#34;http://192.168.1.249:80/rainfall/acomb-codlaw-hill?start=2024-02-01&amp;amp;page=101&amp;amp;pagesize=6&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;readings&amp;#34;&lt;/span>: &lt;span class="o">[&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2024-02-09T01:30:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.2,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;station&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;acomb-codlaw-hill&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2024-02-09T01:45:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.2,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;station&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;acomb-codlaw-hill&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2024-02-09T02:00:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.2,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;station&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;acomb-codlaw-hill&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2024-02-09T02:15:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.2,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;station&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;acomb-codlaw-hill&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2024-02-09T02:30:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.2,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;station&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;acomb-codlaw-hill&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">{&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;timestamp&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;2024-02-09T02:45:00Z&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;level&amp;#34;&lt;/span>: 0.2,
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;station&amp;#34;&lt;/span>: &lt;span class="s2">&amp;#34;acomb-codlaw-hill&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="o">]&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>To ensure the API worked as expected, I ran the &lt;a class="link" href="#the-problem" >provided test suite&lt;/a>, which I could call to know if
+what I&amp;rsquo;ve done was working:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-shell" data-lang="shell">&lt;span class="line">&lt;span class="cl">% ./FloodApiTests http://192.168.1.249:80
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>On first inspection the test suite works as expected, however, I did notice that some tests were failing. After
+some investigation, I found that they were failing due to performance issues and the test suite was timing out. With
+this in mind, I decided to ignore those failing tests and call it a success. This timeout is only due to multiple
+requests being made at once, and the ESP32-E is not powerful enough to handle them. I also verified this by hitting
+the endpoint manually.&lt;/p>
+&lt;h2 id="what-i-learned">What I learned
+&lt;/h2>&lt;p>The purpose of the Learn by Doing initiative is to undertake a project in a language or technology that would challenge
+you. This is a great way to learn a new skill or technique, and this project was no exception. I gained a lot of
+experience
+working with the ESP32-E, understanding what it can do, and how to use it effectively. The main goal of using this
+microcontroller was to explore how it could be used in a home automation context, and I&amp;rsquo;m happy to know that it could
+be used in this way.&lt;/p>
+&lt;p>The first and biggest thing I learned was how many libraries exist on the PlatformIO library registry, and without
+a couple of libraries supporting the ESP32-E, I would&amp;rsquo;ve struggled to get this project working. I wanted to give
+mention to the following libraries which helped me get this project working:&lt;/p>
+&lt;ul>
+&lt;li>&lt;a class="link" href="https://arduinojson.org/" target="_blank" rel="noopener"
+>ArduinoJson&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://docs.arduino.cc/libraries/liquidcrystal/" target="_blank" rel="noopener"
+>LiquidCrystal&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://github.com/espressif/arduino-esp32/tree/master/libraries/WebServer" target="_blank" rel="noopener"
+>ESP32 WebServer&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://github.com/siara-cc/esp32_arduino_sqlite3_lib" target="_blank" rel="noopener"
+>ESP32_Arduino_SQLite3_Lib&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://github.com/google/googletest" target="_blank" rel="noopener"
+>GoogleTest&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;p>The next takeaway was the understanding of using external storage. I knew that the flash memory of an ESP32-E was
+limited and always will be. Knowing that I could use an external storage device, such as a MicroSD card, allowed me to
+explore how I could use this to store data. In this project I used it to store the SQLite3 database and could easily
+write to that database as well if I were to record data instead.&lt;/p>
+&lt;p>The last thing I learnt was just how straightforward it is to set up a REST API on an ESP32-E. Using the
+&lt;a class="link" href="https://github.com/espressif/arduino-esp32/tree/master/libraries/WebServer" target="_blank" rel="noopener"
+>ESP32 WebServer&lt;/a> library-as seen within
+the &lt;a class="link" href="#flood-routes" >flood routes&lt;/a> section-I was able to quickly build an API which could be used to
+retrieve data from the SQLite3 database. While most of my use cases for the ESP32-E revolve around home automation,
+adding &lt;code>WebServer&lt;/code> to my devices would make it easy to query their status and gather additional information.&lt;/p>
+&lt;h2 id="what-id-do-differently">What I&amp;rsquo;d do differently
+&lt;/h2>&lt;p>The biggest thing I would do differently if I were to do this project again is to use a different microcontroller. The
+Firebeetle 2 ESP32-E is a great microcontroller, yet the version I own has storage limitations which make it unsuitable
+for this kind of application; although I was able to fit the application on the microcontroller, I had to disable any
+over-the-air update
+functionality to do so, making it impossible to update the application remotely. There are other models of this same
+microcontroller
+with more flash memory, specifically a &lt;a class="link" href="https://www.dfrobot.com/product-2837.html" target="_blank" rel="noopener"
+>16MB variant&lt;/a>, which would allow me
+to
+hold the entire application without compromise.&lt;/p>
+&lt;p>If I wasn&amp;rsquo;t limiting myself to what database solution I should use, I would&amp;rsquo;ve perhaps went with a MySQL database.
+Realistically,
+if I were setting up a home automation system, I&amp;rsquo;d like all the devices to be connected and storing data in the same
+database to keep
+all the data in one place. It would also mean that not every device I own would need to have a MicroSD card, making it
+more
+cost-effective.&lt;/p>
+&lt;h2 id="wrap-up">Wrap up
+&lt;/h2>&lt;p>I would like to thank to &lt;a class="link" href="https://robanderson.dev/" target="_blank" rel="noopener"
+>Rob Anderson&lt;/a> for creating July&amp;rsquo;s Learn by doing challenge, it
+was incredibly interesting! This
+project was a great way to understand embedded systems, and I&amp;rsquo;m looking forward to exploring more of the capabilities of
+the Firebeetle 2 ESP32-E in the future.&lt;/p></description></item><item><title>Hello!</title><link>https://jbriggs.dev/p/hello/</link><pubDate>Wed, 29 Jan 2025 18:48:00 +0000</pubDate><guid>https://jbriggs.dev/p/hello/</guid><description>&lt;img src="https://jbriggs.dev/p/hello/cover.jpeg" alt="Featured image of post Hello!" />&lt;p>First I&amp;rsquo;d like to say hello, so I guess hello! My plan for this year is
+to grow my social media presence a bit more. So to do this, I&amp;rsquo;ve created this blog.
+I don&amp;rsquo;t have a proper plan as to what I&amp;rsquo;ll post on here, but I do aim to post content
+which I find beneficial, or things I have learnt. Although the majority of my work
+is software development focused, that doesn&amp;rsquo;t necessarily mean that all of my
+posts will be related; they could just be tech related or things I found cool!&lt;/p>
+&lt;p>What I do know, is that I have a bunch of projects which I&amp;rsquo;ll be posting on
+here from my old portfolio. My old portfolio is currently sat in limbo behind
+the paywall which is Adobe so it would be good to revisit some of my older work!
+Expect to see some of this work in the near future!&lt;/p></description></item><item><title>Ludum Dare 44 - Nine Lives</title><link>https://jbriggs.dev/p/2019-04-ludum-dare-44/</link><pubDate>Sun, 14 Apr 2019 00:00:00 +0000</pubDate><guid>https://jbriggs.dev/p/2019-04-ludum-dare-44/</guid><description>&lt;img src="https://jbriggs.dev/p/2019-04-ludum-dare-44/cover.png" alt="Featured image of post Ludum Dare 44 - Nine Lives" />&lt;p>For anyone who is unaware, Ludum Dare is a bi-annual game jam where participants take
+part in creating a game for a common theme which tends to be announced the moment the
+event starts. From this point, participants receive 48 hours to create and submit their
+game.&lt;/p>
+&lt;p>For Ludum Dare 44, the theme was &amp;ldquo;Your life is currency&amp;rdquo;. With this being my first
+game jam, I didn&amp;rsquo;t rush into creating the game and I instead brainstormed for probably
+a bit too long which wasted most of first day. In hindsight, I should&amp;rsquo;ve just started
+creating something, even if it was just the basic structure of a video game (i.e.
+menus and game systems).&lt;/p>
+&lt;p>Once I had an idea, I finally spent the remaining time rushing a game out. I learnt
+a fair amount about Unity development (this was my first in depth foray into Unity) and
+I published something which I think was in theme. I also learnt quite a lot about
+deploying and publishing embedded Unity games using &lt;a class="link" href="https://itch.io/" target="_blank" rel="noopener"
+>itch.io&lt;/a>.&lt;/p>
+&lt;p>The game I finally created was called &amp;ldquo;Nine Lives&amp;rdquo;. Given the theme of the game jam
+was &amp;ldquo;Your life is currency&amp;rdquo;, I decided I could play on the common expression that cats
+have 9 lives. The game itself is a bit of a linear roguelike, inspired by earlier
+The Legend of Zelda games, where you go from room to room. This game was an endless
+runner and consisted of yourself running around as a cat shooting balls of wool
+at oversized rats. In the game, you can score points by killing rats, and sometimes
+collect more hearts to keep your life up.&lt;/p>
+&lt;p>In the end, although I did follow the theme slightly, it wasn&amp;rsquo;t a very strong submission.
+There wasn&amp;rsquo;t really much of an idea of currency, and although you had a life total in game,
+it was more of a health bar as opposed to a currency of sorts. I did however learn quite
+a lot about game development, and how Unity handles collisions and scenes. I also learnt
+more about the sprite program Asprite. This was my first ever instance of using this program,
+and I thoroughly recommend it to create in game assets in pixel form as it&amp;rsquo;s super easy to use!&lt;/p>
+&lt;p>Below is my submission for the Ludum Dare 44!&lt;/p>
+&lt;iframe frameborder="0" src="https://itch.io/embed-upload/2809833?color=333333" allowfullscreen="" width="100%" height="704">&lt;/iframe>
+&lt;p>There are three takeaways which I learnt when it comes to tackling future game jams. The first
+takeaway is to not spend too much time trying to think of the best idea to submit something.
+48 hours is really not much time for creating a game, so if you don&amp;rsquo;t have an idea, at least start
+creating something.&lt;/p>
+&lt;p>The second thing I took away from this experience was that you don&amp;rsquo;t need to create
+something perfect. In my head for this submission, I wanted a completed game to show off,
+so I went for an endless runner based game. However after looking at other submissions, other
+games were essentially tech demos, or a first level of sorts. Due to this, they
+were much more refined.&lt;/p>
+&lt;p>Finally, the main takeaway was that game jams are there to learn something new. It&amp;rsquo;s okay to
+not submit something as really, a game jam is just a fun excuse to learn something new and
+create something along the way!&lt;/p></description></item><item><title>AI, Multi-Threading and Networking Bot Game</title><link>https://jbriggs.dev/p/2018-01-ai/</link><pubDate>Fri, 19 Jan 2018 00:00:00 +0000</pubDate><guid>https://jbriggs.dev/p/2018-01-ai/</guid><description>&lt;img src="https://jbriggs.dev/p/2018-01-ai/ai-project-1.jpg" alt="Featured image of post AI, Multi-Threading and Networking Bot Game" />&lt;p>For an assignment during my degree in Computer Games Programming, I was
+tasked with making a game in which I had to write the AI for a team of
+bots to beat another team of bots with badly written AI. This was all
+done in C++ and within a 2D game engine created by the module tutor Chris Rook.&lt;/p>
+&lt;p>The game was essentially a 5 v 5 between two teams fighting over
+domination points. There is no end to the game, just two scores
+which explain which team had the better AI. Everything was already
+created before starting the AI such as the map, where the domination
+points were, the teams and the various rules which needed to be
+followed. All there was left to do was write a AI which could beat
+the enemies teams pre-made AI.&lt;/p>
+&lt;p>The AI was split into two different sections; the generation of a
+navmesh in which the bots could use the navmesh to work out how to
+get from point A to point B, and then the making of the bots core
+AI which told the bot when to find a domination point, when to retreat
+and get ammo, and when to attack.&lt;/p>
+&lt;p>To start with, since the map was pre-made by Chris, all there was
+to do was to generate a navmesh. The navmesh was made by passing a
+rectangle into a function which partitions the rectangle into 4
+smaller rectangles if the original rectangle is overlapping an
+obstacle. If the rectangle either doesn’t overlap and obstacle
+or gets too small, a node is placed and saved into a list of nodes.&lt;/p>
+&lt;p>&lt;img src="https://jbriggs.dev/p/2018-01-ai/ai-project-2.png"
+width="402"
+height="241"
+srcset="https://jbriggs.dev/p/2018-01-ai/ai-project-2_hu_ee794f03e969c0a1.png 480w, https://jbriggs.dev/p/2018-01-ai/ai-project-2_hu_3c1de383594cb2b8.png 1024w"
+loading="lazy"
+alt="Graphic showcasing how the navmesh was created."
+class="gallery-image"
+data-flex-grow="166"
+data-flex-basis="400px"
+>&lt;/p>
+&lt;p>Then once all the nodes are placed, edges are created between nodes
+which can see each other in which paths are made which can reach
+each other. By doing this, a network of paths is then created and
+the bots finally have a navmesh which can be traversed. This navmesh
+can then be used within the A* path-finding algorithm later.&lt;/p>
+&lt;p>The second part of the bots AI was then started once the map had
+been made, and that began with behaviours. These behaviours were
+actions which the bots could do; seek, flee, arrive, evade, pursue,
+path find and wall evade. The first five were more advanced and were
+turned on in specific moments during the path find behaviour
+(when following points in a path, the bot would seek the next node,
+when arriving at the last point in a path, it would use the
+arrive behaviour). The wall avoid behaviour was essentially
+turned on at all times to make sure a bot would not get stuck
+on a wall.&lt;/p>
+&lt;p>&lt;img src="https://jbriggs.dev/p/2018-01-ai/ai-project-3.jpg"
+width="1140"
+height="641"
+srcset="https://jbriggs.dev/p/2018-01-ai/ai-project-3_hu_2fa3e04981f08c51.jpg 480w, https://jbriggs.dev/p/2018-01-ai/ai-project-3_hu_cebd80c0a7816f32.jpg 1024w"
+loading="lazy"
+alt="Bots drawing a line towards the next node they are walking to."
+class="gallery-image"
+data-flex-grow="177"
+data-flex-basis="426px"
+>
+&lt;img src="https://jbriggs.dev/p/2018-01-ai/ai-project-4.jpg"
+width="1140"
+height="641"
+srcset="https://jbriggs.dev/p/2018-01-ai/ai-project-4_hu_b4796b7a001d4f3d.jpg 480w, https://jbriggs.dev/p/2018-01-ai/ai-project-4_hu_c4ec7b3673b845b0.jpg 1024w"
+loading="lazy"
+alt="Debug information showing bot position, and they’re current state."
+class="gallery-image"
+data-flex-grow="177"
+data-flex-basis="426px"
+>&lt;/p>
+&lt;p>The most advanced behaviour of these would be the path finding
+behaviour, in which a path is followed using the seek and
+arrive behaviours. However for this to work, a path must be
+found first. Using the navmesh which was made before, an A*
+algorithm is used to find the shortest path from A to B given
+two coordinates.&lt;/p>
+&lt;p>After this, a function was made which combined all of the different
+behaviours to make one acceleration vector which the bot used given
+whichever behaviour is being used at that current time. An easy
+explanation of this would be that the bot is heading towards a goal,
+but a wall is in the way. So the acceleration of the seek is added
+to the acceleration of the wall avoid. In doing so, the bot would
+still head towards the goal, even if the bot had to slightly turn
+away from a wall to avoid hitting it.&lt;/p>
+&lt;p>Next to make use of these behaviours, different states was made.
+A state within the program would in the end give a bot a specific
+task. In this case, three states was made; capture in which a
+bot will go and find a domination point and capture it, attack
+in which an enemy is close and the bot will fight the enemy, and
+reload in which a bot will go find a reload point and restock
+on ammo. With this done, the bots were complete and could win
+in a game. However, more could be done to improve the program.&lt;/p>
+&lt;p>Multi-Threading is the idea that a task within a program or application
+would run a process off the main thread the program runs on an multitasks
+calculations. This is massively useful in terms of making sure a program
+is still responsive whilst working out a huge problem or loading a big
+file (no one wants a program which freezes and becomes unresponsive for
+a few seconds as it is unprofessional).&lt;/p>
+&lt;p>This was implemented into the program after finding out that the
+program would stutter whenever a bot needed to do some path finding.
+With the A* algorithm looping through hundreds of nodes within the
+game, it can take a lot of processing power and freeze the game
+slightly. This was proven by recording the update times, and the
+first update in the game finding 5 different paths in one update
+cycle (due to having 5 bots per team) was found to be quite large
+compared to an average frame. Therefore, it was made so whenever a
+path was to be worked out with the A* algorithm, it would be done
+on a separate thread and the bot would wait until the path was then
+found. This fixed any stutters within the program, and especially
+within the start of the game. The first frame then returned back
+to an average frame time and any stutters were completely eliminated.
+Adding more bots to each team even showed that it had fixed the
+problem as even with 100 bots finding a path, no pauses or stutters
+was shown as it were previously even with just 5 bots.&lt;/p>
+&lt;p>The other improvement made within the game was the use of networking.
+Despite the game only being two teams of bots and not two human players,
+it was still done. The game was made so that one computer running the
+game could act as the host, and another computer running the game
+could act as the client and connect to the host. The host would
+then send over all the bots position data, ammo and when the bot
+was shooting so then everything which happened on the host computer would
+occur on the client computer. This was all done through bit packing showed
+how a client on any game could spectate another game with just basic
+information.&lt;/p>
+&lt;p>After the two improvements was done, the game was then finished complete
+with a working AI which used A* path finding and states, multi-threading
+and networking. As a year-long project, a lot was learnt in undertaking
+this project including how A*, multi threading and networking all work.&lt;/p></description></item><item><title>Star Fox PS4 remake</title><link>https://jbriggs.dev/p/2017-07-lyat-wars/</link><pubDate>Tue, 25 Jul 2017 00:00:00 +0000</pubDate><guid>https://jbriggs.dev/p/2017-07-lyat-wars/</guid><description>&lt;img src="https://jbriggs.dev/p/2017-07-lyat-wars/lyat-wars-ps4.png" alt="Featured image of post Star Fox PS4 remake" />&lt;blockquote>
+&lt;p>This post was written 9th February 2025, as a retrospective post to port my portfolio from Adobe Portfolio to this blog.&lt;/p>&lt;/blockquote>
+&lt;p>One of the modules in my Computer Games Programming Degree at &lt;a class="link" href="https://www.northumbria.ac.uk/" target="_blank" rel="noopener"
+>Northumbria University&lt;/a> involved myself creating a game using the PlayStation 4 development kits. A friend of mine had the initiatice to recreate a video game from his childhood. The marking criteria for this module only involved gameplay elements such as loading &lt;code>.obj&lt;/code> files, rendering textures and AI. This meant no marks were ever given for creativity and story telling; theoretically I could&amp;rsquo;ve produced unplayable rubbish, but if it had aspects of gameplay like AI or even 3D rendering, it would&amp;rsquo;ve scored marks. So I copied his thought process because if I recreated a game from my childhood as well, I would spend less time focusing on what to create and just focusing on gameplay mechanics.&lt;/p>
+&lt;p>With this in mind, I needed to pick something which wasn&amp;rsquo;t too complicated, but also something I would be interested in recreating; if I thoroughly into recreating a game I loved, chances are I would also not mind spending hours creating the game as a passion project. In the end, I went with &lt;a class="link" href="https://en.wikipedia.org/wiki/Star_Fox_64" target="_blank" rel="noopener"
+>Star Fox 64&lt;/a> (I knew it as Lyat Wars growing up due to Nintendo wanting to avoid confusion with a German company named &amp;ldquo;StarVox&amp;rdquo;).&lt;/p>
+&lt;p>To learn how to create games for the PlayStation 4, there was a very helpful tutorial given to the students within my course which went into how to load and render &lt;code>.obj&lt;/code> files, to shader work and it&amp;rsquo;s relativity to GLSL, to how to program the controller and it&amp;rsquo;s behaviour. A lot of the work which was done within this tutorial was very much a tutorial on how to write a game in the same style as a lecturer, meaning everyone had the same game structure, but it was a very good start into the various aspects of creating a 3D game from scratch. Retrospectively, the PlayStation 4 actually did a lot of the rending for you with it&amp;rsquo;s own SDK compared to OpenGL, but you still had to provide the SDK with your game data and logic. However with the basics understood, there was enough to make a start on the Star Fox 64 remake. Not too important, but games written to use the official PlayStation 4 development kits were written in &lt;a class="link" href="https://en.wikipedia.org/wiki/C%2B%2B" target="_blank" rel="noopener"
+>C++&lt;/a>.&lt;/p>
+&lt;p>What I remembered most of Star Fox 64 from my childhood was how fun it was to control the player ship, and who can forget performing a &lt;a class="link" href="https://www.google.com/search?q=do&amp;#43;a&amp;#43;barrel&amp;#43;roll" target="_blank" rel="noopener"
+>barrel roll&lt;/a>! So I primarily focused on the handling of the player ship. I also knew I only had time to create a tech demo of sorts. The majority of the original game is actually an on the rails shooter, however I figured at the time it was easier to just program a free flying ship just like in the boss areas of the game. This way I could focus on the ship controls, and then later do the compilated rails shooter stuff if I had time; I didn&amp;rsquo;t so good call!&lt;/p>
+&lt;p>In the end, I ended up creating something which consisted of a flat plane where enemies would constantly spawn in the middle, and the player could shoot them down. The Player also had health and when you died, it would be game over. It was quite a simple demo, but the work to get to that point was extensive. I have linked a clip of the game below. Unfortunately the clip doesn&amp;rsquo;t show all the maneuvers you could do in the game and I no longer have access to the PlayStation 4 dev kits to record the game again.&lt;/p>
+&lt;iframe width="560" height="315" src="https://www.youtube.com/embed/9XEttKAj2ak?si=iP7Pk1-EYiZJpoPU" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>&lt;/iframe>
+&lt;p>In the future, I would like to see if I could play the game in a PlayStation 4 emulator . This way I could look back on my code and perhaps have a retrospection on what I&amp;rsquo;ve learnt since working on this project.&lt;/p>
+&lt;p>This project was done under NDA. I still have the source code for it, but until there is a clear indication that it&amp;rsquo;s okay to release the source code, it will remain private.&lt;/p></description></item></channel></rss>
