@@ -1,6 +1,9 @@
 public
 resources
 .hugo_build.lock
+.DS_store
+
 /.devcontainer/
 /.github/
 /.vscode/
+/.idea/
